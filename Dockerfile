@@ -4,7 +4,8 @@ WORKDIR /app
 
 FROM base AS deps
 COPY package.json package-lock.json ./
-RUN npm ci
+# npm ci fails on Alpine when lock was generated on Windows (optional native deps)
+RUN npm install
 
 FROM base AS builder
 COPY --from=deps /app/node_modules ./node_modules
