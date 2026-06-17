@@ -69,7 +69,7 @@ export function DocumentScanUpload({
             "Таймаут сервера при распознавании. На nginx увеличьте proxy_read_timeout для /api/guests/.../document-scan (до 180s)."
           );
         } else {
-          setMessage(`Ошибка сервера (${res.status}). Проверьте логи приложения.`);
+          setMessage(`Ошибка сервера (${res.status}). Ответ не JSON — пересоберите Docker-образ или проверьте логи.`);
         }
         return;
       }
@@ -79,7 +79,7 @@ export function DocumentScanUpload({
         setMessage(
           data.partial
             ? `${data.error ?? "Распознавание не удалось"}. Скан прикреплён к профилю.`
-            : data.error ?? "Ошибка"
+            : data.error ?? `Ошибка сервера (${res.status})`
         );
         return;
       }

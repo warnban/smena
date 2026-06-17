@@ -63,11 +63,20 @@ export async function POST(
 
     const buffer = Buffer.from(await file.arrayBuffer());
 
-    const document = await storeGuestDocument(
-      guest.id,
-      { name: file.name, buffer, size: file.size },
-      docType
-    );
+    let document;
+    try {
+      document = await storeGuestDocument(
+        guest.id,
+        { name: file.name, buffer, size: file.size },
+        docType
+      );
+    } catch (e) {
+      console.error("[document-scan] storage", e);
+      return NextResponse.json(
+        { error: apiErrorMessage(e, "Не удалось сохранить файл (проверьте S3 в .env)") },
+        { status: 500 }
+      );
+    }
 
     let extract;
     try {

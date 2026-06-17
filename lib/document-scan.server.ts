@@ -1,6 +1,5 @@
 import "server-only";
 
-import sharp from "sharp";
 import {
   DOCUMENT_SCAN_SYSTEM_PROMPT,
   DOCUMENT_SCAN_USER_TEXT,
@@ -19,9 +18,26 @@ type ContentPart =
   | { type: "image_url"; image_url: { url: string } }
   | { type: "file"; file: { filename: string; file_data: string } };
 
+type SharpModule = typeof import("sharp");
+
+async function loadSharp(): Promise<SharpModule["default"] | null> {
+  try {
+    const mod = await import("sharp");
+    return mod.default;
+  } catch (e) {
+    console.error("[document-scan] sharp unavailable", e);
+    return null;
+  }
+}
+
 export async function prepareScanImage(buffer: Buffer, mime: string): Promise<{ buffer: Buffer; mime: string }> {
   if (mime === "application/pdf") {
     return { buffer, mime };
+  }
+
+  const sharp = await loadSharp();
+  if (!sharp) {
+    return { buffer, mime: mime === "image/png" ? "image/png" : "image/jpeg" };
   }
 
   const img = sharp(buffer, { failOn: "none" }).rotate();
