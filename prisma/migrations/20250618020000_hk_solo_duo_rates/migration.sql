@@ -1,0 +1,6 @@
+-- Hotel HK fixed rates
+ALTER TABLE "Hotel" ADD COLUMN IF NOT EXISTS "hkSoloRate" INTEGER NOT NULL DEFAULT 5000;
+ALTER TABLE "Hotel" ADD COLUMN IF NOT EXISTS "hkDuoRate" INTEGER NOT NULL DEFAULT 3500;
+
+-- Admin tiers no longer include HK rate
+ALTER TABLE "OccupancyRateTier" DROP COLUMN IF EXISTS "hkRate";

@@ -26,11 +26,27 @@ yarn-debug.log*
 yarn-error.log*
 
 # local env files
+.env
 .env*.local
+
+# cursor / local
+.cursor/
+
+# ocr junk (not used in app)
+*.traineddata
+
+# deploy artifacts
+smena-crm.tar
 
 # vercel
 .vercel
 
 # typescript
 *.tsbuildinfo
-next-env.d.ts
+/public/uploads
+
+# playwright
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/

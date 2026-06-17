@@ -1,0 +1,116 @@
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background: #64748b;
+}
+
+.docx-styles-host {
+  display: none;
+}
+
+.guest-form-print-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 16px;
+  background: #1e293b;
+  color: #f8fafc;
+  box-shadow: 0 2px 8px rgb(0 0 0 / 0.2);
+}
+
+.guest-form-print-title {
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.guest-form-print-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.guest-form-print-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  border-radius: 8px;
+  border: 1px solid #475569;
+  background: #334155;
+  color: #f8fafc;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.guest-form-print-btn.primary {
+  background: #2563eb;
+  border-color: #2563eb;
+}
+
+.guest-form-print-message {
+  text-align: center;
+  padding: 24px;
+  color: #f8fafc;
+  font-size: 14px;
+}
+
+.guest-form-print-message.error {
+  color: #fecaca;
+}
+
+.guest-form-print-body {
+  padding: 24px 16px 48px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 32px;
+}
+
+.guest-form-print-section {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+}
+
+.guest-form-print-body .docx-wrapper {
+  background: #fff;
+  box-shadow: 0 4px 24px rgb(0 0 0 / 0.25);
+}
+
+@media print {
+  .no-print {
+    display: none !important;
+  }
+
+  html,
+  body {
+    background: #fff !important;
+  }
+
+  .guest-form-print-body {
+    padding: 0;
+    gap: 0;
+  }
+
+  .guest-form-print-section {
+    page-break-after: always;
+    break-after: page;
+  }
+
+  .guest-form-print-section:last-child {
+    page-break-after: auto;
+    break-after: auto;
+  }
+
+  .guest-form-print-body .docx-wrapper {
+    box-shadow: none !important;
+    margin: 0 !important;
+  }
+}

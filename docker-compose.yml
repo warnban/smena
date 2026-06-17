@@ -1,0 +1,14 @@
+# Сервер приложения — CRM (подключение к внешней БД через DATABASE_URL в .env)
+# Запуск:
+#   docker compose up -d --build
+
+services:
+  app:
+    build: .
+    container_name: smena-crm
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      NODE_ENV: production
+    ports:
+      - "127.0.0.1:3000:3000"
