@@ -1,4 +1,4 @@
-﻿-- CreateEnum
+-- CreateEnum
 CREATE TYPE "RoomStatus" AS ENUM ('available', 'occupied', 'checkin', 'checkout', 'cleaning', 'maintenance');
 
 -- CreateEnum
