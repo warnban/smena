@@ -85,6 +85,7 @@ export async function recognizeDocumentFromScan(
     model: aitunnelVisionModel(),
     max_tokens: 4096,
     temperature: 0.1,
+    timeoutMs: 150_000,
     messages: [
       { role: "system", content: DOCUMENT_SCAN_SYSTEM_PROMPT },
       {

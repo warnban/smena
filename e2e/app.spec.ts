@@ -5,7 +5,7 @@ test.describe("Auth UI", () => {
   test("login page renders", async ({ page }) => {
     await page.goto("/login");
     await expect(page.getByRole("heading", { name: "Смена" })).toBeVisible();
-    await expect(page.getByText("demo@smena.ru")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Войти" })).toBeVisible();
   });
 
   test("demo login via form redirects to dashboard", async ({ page }) => {

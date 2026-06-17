@@ -55,7 +55,6 @@ export default function LoginPage() {
         <p className="text-center text-sm text-muted-foreground mt-6">
           Нет аккаунта? <Link href="/register" className="text-primary font-semibold hover:underline">Регистрация владельца</Link>
         </p>
-        <p className="text-center text-[11px] text-muted-foreground mt-3">Демо: demo@smena.ru / demo123</p>
       </div>
     </div>
   );

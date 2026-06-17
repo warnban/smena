@@ -56,10 +56,23 @@ export function DocumentScanUpload({
         body: fd,
       });
 
-      const data = (await res.json()) as DocumentScanApiResponse & {
-        error?: string;
-        partial?: boolean;
-      };
+      const raw = await res.text();
+      let data: DocumentScanApiResponse & { error?: string; partial?: boolean };
+      try {
+        data = JSON.parse(raw) as DocumentScanApiResponse & { error?: string; partial?: boolean };
+      } catch {
+        setStatus("error");
+        if (res.status === 413) {
+          setMessage("Файл слишком большой для сервера (лимит 10 МБ). Сожмите фото или уменьшите nginx client_max_body_size.");
+        } else if (res.status === 504 || res.status === 502) {
+          setMessage(
+            "Таймаут сервера при распознавании. На nginx увеличьте proxy_read_timeout для /api/guests/.../document-scan (до 180s)."
+          );
+        } else {
+          setMessage(`Ошибка сервера (${res.status}). Проверьте логи приложения.`);
+        }
+        return;
+      }
 
       if (!res.ok) {
         setStatus(data.partial ? "warn" : "error");

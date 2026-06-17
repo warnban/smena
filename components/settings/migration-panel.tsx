@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Download, Loader2, CheckCircle2, AlertTriangle } from "lucide-react";
 import type { BotNetworkListItem } from "@/lib/migration/bot-types";
+import { useApp } from "@/components/providers/app-data";
 
 type PreviewStats = {
   guestCount: number;
@@ -24,6 +25,11 @@ type ImportResult = {
   };
 };
 
+function countEntries(map: Record<string, number> | undefined): number {
+  if (!map) return 0;
+  return Object.values(map).reduce((sum, n) => sum + n, 0);
+}
+
 const LABELS: Record<string, string> = {
   hotels: "Отели",
   rooms: "Комнаты",
@@ -34,7 +40,29 @@ const LABELS: Record<string, string> = {
   paymentMethods: "Способы оплаты",
 };
 
+async function parseMigrationResponse(res: Response): Promise<{ data: Record<string, unknown>; error?: string }> {
+  const text = await res.text();
+  try {
+    return { data: JSON.parse(text) as Record<string, unknown> };
+  } catch {
+    if (res.status === 504) {
+      return {
+        data: {},
+        error:
+          "Таймаут nginx (504). Импорт мог продолжиться на сервере — проверьте логи и данные, затем повторите при необходимости.",
+      };
+    }
+    return {
+      data: {},
+      error: res.ok
+        ? "Некорректный ответ сервера"
+        : `Ошибка ${res.status}: сервер вернул не JSON (часто это таймаут прокси)`,
+    };
+  }
+}
+
 export function MigrationPanel({ canEdit }: { canEdit: boolean }) {
+  const { refreshSilent } = useApp();
   const [botUrl, setBotUrl] = useState("");
   const [secret, setSecret] = useState("");
   const [fromDate, setFromDate] = useState("2025-06-01");
@@ -63,14 +91,18 @@ export function MigrationPanel({ canEdit }: { canEdit: boolean }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ botUrl, secret, fromDate }),
       });
-      const data = await res.json();
-      if (!res.ok) {
-        setError(data.error || "Не удалось подключиться");
+      const { data, error: parseError } = await parseMigrationResponse(res);
+      if (parseError) {
+        setError(parseError);
         return;
       }
-      setNetworks(data.networks ?? []);
-      if (data.networks?.length === 1) {
-        setNetworkId(data.networks[0].id);
+      if (!res.ok) {
+        setError(String(data.error || "Не удалось подключиться"));
+        return;
+      }
+      setNetworks((data.networks as BotNetworkListItem[]) ?? []);
+      if ((data.networks as BotNetworkListItem[])?.length === 1) {
+        setNetworkId((data.networks as BotNetworkListItem[])[0].id);
       }
     } finally {
       setBusy(false);
@@ -91,13 +123,17 @@ export function MigrationPanel({ canEdit }: { canEdit: boolean }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ botUrl, secret, fromDate, networkId }),
       });
-      const data = await res.json();
-      if (!res.ok) {
-        setError(data.error || "Ошибка предпросмотра");
+      const { data, error: parseError } = await parseMigrationResponse(res);
+      if (parseError) {
+        setError(parseError);
         return;
       }
-      setStats(data.stats);
-      setObjectNames(data.objectNames ?? []);
+      if (!res.ok) {
+        setError(String(data.error || "Ошибка предпросмотра"));
+        return;
+      }
+      setStats(data.stats as PreviewStats);
+      setObjectNames((data.objectNames as string[]) ?? []);
     } finally {
       setBusy(false);
     }
@@ -119,16 +155,25 @@ export function MigrationPanel({ canEdit }: { canEdit: boolean }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ botUrl, secret, fromDate, networkId }),
       });
-      const data = await res.json();
-      if (!res.ok) {
-        setError(data.error || "Ошибка импорта");
+      const { data, error: parseError } = await parseMigrationResponse(res);
+      if (parseError) {
+        setError(parseError);
         return;
       }
-      setResult(data);
+      if (!res.ok) {
+        setError(String(data.error || "Ошибка импорта"));
+        return;
+      }
+      const importResult = data as ImportResult;
+      setResult(importResult);
+      await refreshSilent();
     } finally {
       setBusy(false);
     }
   }
+
+  const createdTotal = countEntries(result?.created);
+  const skippedTotal = countEntries(result?.skipped);
 
   const incomeDiff = result
     ? result.reconciliation.crmIncome - result.reconciliation.botIncome
@@ -147,6 +192,7 @@ export function MigrationPanel({ canEdit }: { canEdit: boolean }) {
         <p className="text-[12px] text-muted-foreground mt-1">
           Перенос хостелов, гостей, оплат с указанной даты. Долги и фиктивные оплаты не переносятся.
           На старом сервере должен быть задан тот же <code className="text-[11px]">MIGRATION_SECRET</code>.
+          Импорт может занять несколько минут — не закрывайте страницу.
         </p>
       </div>
 
@@ -244,11 +290,30 @@ export function MigrationPanel({ canEdit }: { canEdit: boolean }) {
           <p className="font-bold text-foreground flex items-center gap-1.5">
             <CheckCircle2 size={14} className="text-success" /> Импорт завершён
           </p>
+          {createdTotal === 0 && skippedTotal > 0 && (
+            <p className="text-[11px] text-muted-foreground flex items-start gap-1">
+              <AlertTriangle size={12} className="shrink-0 mt-0.5" />
+              Новых записей нет — всё уже было перенесено ранее. Обновите страницу или откройте «Шахматку» / «Гости».
+            </p>
+          )}
+          {createdTotal === 0 && skippedTotal === 0 && (
+            <p className="text-[11px] text-destructive flex items-start gap-1">
+              <AlertTriangle size={12} className="shrink-0 mt-0.5" />
+              Пакет пустой: проверьте URL старой CRM, сеть и дату в предпросмотре (должны быть гости или хостелы).
+            </p>
+          )}
           <div className="flex flex-wrap gap-2">
             {Object.entries(result.created).map(([k, v]) =>
               v > 0 ? (
                 <span key={k} className="px-2 py-1 rounded-lg bg-card border border-border">
                   +{v} {LABELS[k] ?? k}
+                </span>
+              ) : null
+            )}
+            {Object.entries(result.skipped).map(([k, v]) =>
+              v > 0 ? (
+                <span key={`skip-${k}`} className="px-2 py-1 rounded-lg bg-muted border border-border text-muted-foreground">
+                  пропущено {v} {LABELS[k] ?? k}
                 </span>
               ) : null
             )}

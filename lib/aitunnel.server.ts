@@ -51,6 +51,7 @@ export async function aitunnelChatCompletion(params: {
   tool_choice?: "auto" | "none";
   max_tokens?: number;
   temperature?: number;
+  timeoutMs?: number;
 }): Promise<{
   content: string | null;
   tool_calls?: Array<{
@@ -60,21 +61,31 @@ export async function aitunnelChatCompletion(params: {
   }>;
   model: string;
 }> {
-  const res = await fetch(`${AITUNNEL_BASE}/chat/completions`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${aitunnelApiKey()}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model: params.model ?? aitunnelAssistantModel(),
-      messages: params.messages,
-      tools: params.tools,
-      tool_choice: params.tool_choice ?? (params.tools?.length ? "auto" : undefined),
-      max_tokens: params.max_tokens ?? 4096,
-      temperature: params.temperature ?? 0.2,
-    }),
-  });
+  const timeoutMs = params.timeoutMs ?? 120_000;
+  let res: Response;
+  try {
+    res = await fetch(`${AITUNNEL_BASE}/chat/completions`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${aitunnelApiKey()}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: params.model ?? aitunnelAssistantModel(),
+        messages: params.messages,
+        tools: params.tools,
+        tool_choice: params.tool_choice ?? (params.tools?.length ? "auto" : undefined),
+        max_tokens: params.max_tokens ?? 4096,
+        temperature: params.temperature ?? 0.2,
+      }),
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+  } catch (e) {
+    if (e instanceof Error && e.name === "TimeoutError") {
+      throw new Error("Превышено время ожидания ответа AI. Попробуйте снова или загрузите фото меньшего размера.");
+    }
+    throw e;
+  }
 
   const body = (await res.json().catch(() => ({}))) as {
     error?: { message?: string };

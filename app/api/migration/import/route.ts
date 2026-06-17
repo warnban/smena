@@ -4,6 +4,9 @@ import { fetchBotExport } from "@/lib/migration/bot-fetch.server";
 import { importBotExport } from "@/lib/migration/bot-import.server";
 import { apiErrorMessage } from "@/lib/api-error";
 
+/** Импорт больших сетей может занимать несколько минут. */
+export const maxDuration = 600;
+
 export async function POST(req: NextRequest) {
   try {
     const session = await getSession();
