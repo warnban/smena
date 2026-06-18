@@ -23,6 +23,7 @@ export function resolveAppZone(host: string, pathname: string): AppZone {
     pathname.startsWith("/settings") ||
     pathname.startsWith("/channels") ||
     pathname.startsWith("/housekeeping") ||
+    pathname.startsWith("/linen-control") ||
     pathname.startsWith("/schedule") ||
     pathname.startsWith("/organizations") ||
     pathname.startsWith("/refunds")

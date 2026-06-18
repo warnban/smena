@@ -75,6 +75,7 @@ export const NAV_ITEMS = [
     { id: "reports", href: "/reports", icon: "BarChart3", label: "Отчёты" },
     { id: "schedule", href: "/schedule", icon: "Calendar", label: "График работы" },
     { id: "housekeeping", href: "/housekeeping", icon: "Sparkles", label: "Уборка номеров" },
+    { id: "linen-control", href: "/linen-control", icon: "Layers", label: "Контроль белья" },
   ]},
   { group: "СИСТЕМА", items: [
     { id: "settings", href: "/settings", icon: "Settings", label: "Настройки" },

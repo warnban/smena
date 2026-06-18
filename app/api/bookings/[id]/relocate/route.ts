@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
 import { findAvailableRooms } from "@/lib/booking-availability.server";
-import { formatBedDisplay, guestGenderMatchesDorm, setBedStatus } from "@/lib/dorm.server";
-import { HK_CATEGORY_TYPES, hkTimeNow, startOfDay } from "@/lib/housekeeping";
+import { guestGenderMatchesDorm, setBedStatus } from "@/lib/dorm.server";
+import { HK_CATEGORY_TYPES, hkTimeNow, formatHkPlaceLabel, startOfDay } from "@/lib/housekeeping";
 import { mskDateKey } from "@/lib/msk-time";
 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
@@ -92,8 +92,11 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     }
 
     const bed = newRoom.beds.find((b) => b.id === targetBedId);
-    if (!bed || bed.status !== "available") {
-      return NextResponse.json({ error: "Койко-место недоступно" }, { status: 400 });
+    if (!bed) {
+      return NextResponse.json({ error: "Койко-место не найдено" }, { status: 400 });
+    }
+    if (bed.status === "maintenance") {
+      return NextResponse.json({ error: "Койко-место на ремонте" }, { status: 400 });
     }
   } else {
     if (newBedIdIn) {
@@ -103,17 +106,19 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       return NextResponse.json({ error: "Гость уже в этом номере" }, { status: 400 });
     }
     if (!available.rooms.some((s) => s.roomId === newRoomId && !s.bedId)) {
-      return NextResponse.json({ error: `Номер ${newRoom.number} недоступен` }, { status: 400 });
+      return NextResponse.json({ error: `Номер ${newRoom.number} занят на выбранные даты` }, { status: 400 });
     }
-    if (newRoom.status !== "available") {
-      return NextResponse.json({ error: `Номер ${newRoom.number} недоступен` }, { status: 400 });
+    if (newRoom.status === "maintenance") {
+      return NextResponse.json({ error: `Номер ${newRoom.number} на ремонте` }, { status: 400 });
     }
   }
 
   const oldBed = oldBedId ? await prisma.bed.findUnique({ where: { id: oldBedId } }) : null;
-  const oldRoomNumber = oldBed ? formatBedDisplay(oldBed.label) : booking.room.number;
   const newBed = targetBedId ? newRoom.beds.find((b) => b.id === targetBedId) : null;
-  const newPlaceLabel = newBed ? formatBedDisplay(newBed.label) : newRoom.number;
+  const oldRoomNumber = formatHkPlaceLabel(booking.room.number, oldBed?.label);
+  const newPlaceLabel = newBed
+    ? formatHkPlaceLabel(newRoom.number, newBed.label)
+    : newRoom.number;
 
   const time = hkTimeNow();
 

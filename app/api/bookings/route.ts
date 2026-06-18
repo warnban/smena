@@ -3,8 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
 import { calcStayAmount } from "@/lib/booking-pricing";
 import { mskNightDiff, mskDateKey } from "@/lib/msk-time";
-import { guestGenderMatchesDorm } from "@/lib/dorm.server";
-import { findAvailableRooms } from "@/lib/booking-availability.server";
+import { resolveRoomForBooking } from "@/lib/booking-availability.server";
 
 export async function POST(req: NextRequest) {
   const session = await getSession();
@@ -104,46 +103,25 @@ export async function POST(req: NextRequest) {
     });
   }
 
+  if (bedIdIn && room.kind !== "dorm") {
+    return NextResponse.json({ error: "Койко-место указывается только для общих комнат" }, { status: 400 });
+  }
+
   let bedId: string | null = bedIdIn ? String(bedIdIn) : null;
 
-  if (room.kind === "dorm") {
-    if (!guestGenderMatchesDorm(guest.gender, room.dormGender)) {
-      return NextResponse.json(
-        { error: "Пол гостя не подходит для выбранной общей комнаты" },
-        { status: 400 }
-      );
-    }
-    const available = await findAvailableRooms({
-      hotelId,
-      checkIn: checkInKey,
-      checkOut: checkOutKey,
-      guestGender: guest.gender,
-      kind: "dorm",
-      limit: 100,
-    });
-    if (!bedId) {
-      const auto = available.rooms.find((s) => s.roomId === roomId);
-      if (!auto?.bedId) {
-        return NextResponse.json({ error: "Нет свободных койко-мест в этой комнате" }, { status: 400 });
-      }
-      bedId = auto.bedId;
-    } else if (!available.rooms.some((s) => s.bedId === bedId)) {
-      return NextResponse.json({ error: "Койко-место занято или недоступно" }, { status: 400 });
-    }
-  } else if (bedId) {
-    return NextResponse.json({ error: "Койко-место указывается только для общих комнат" }, { status: 400 });
-  } else {
-    const available = await findAvailableRooms({
-      hotelId,
-      checkIn: checkInKey,
-      checkOut: checkOutKey,
-      kind: "private",
-      limit: 100,
-    });
-    if (!available.rooms.some((s) => s.roomId === roomId && !s.bedId)) {
-      return NextResponse.json({ error: "Номер занят на выбранные даты" }, { status: 400 });
-    }
+  const resolved = await resolveRoomForBooking({
+    hotelId,
+    seatId: session.seatId,
+    checkIn: checkInKey,
+    checkOut: checkOutKey,
+    roomId,
+    bedId: bedId ?? undefined,
+    guestGender: guest.gender,
+  });
+  if (!resolved.ok) {
+    return NextResponse.json({ error: resolved.error }, { status: 400 });
   }
+  bedId = resolved.bedId;
 
   const nights = Math.max(1, mskNightDiff(checkInDate, checkOutDate));
   const amount = amountIn

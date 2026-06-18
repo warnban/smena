@@ -237,6 +237,14 @@ model Hotel {
   hkSoloRate Int @default(5000)
   /// Ставка горничной, если в этот день две и более на смене
   hkDuoRate  Int @default(3500)
+  /// Контроль белья: расход на одну смену постельного
+  linenPillowcasesPerChange Int @default(1)
+  linenSheetsPerChange      Int @default(1)
+  linenDuvetCoversPerChange Int @default(1)
+  /// Примерный остаток полных комплектов на складе (необязательно)
+  linenEstimatedSets        Int?
+  linenDeliveries           LinenDelivery[]
+  utilityMeters             UtilityMeter[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -815,6 +823,7 @@ model HkTask {
   status     HkTaskStatus    @default(pending)
   time       String          @default("")
   est        String          @default("")
+  completedAt DateTime?
   createdAt  DateTime        @default(now())
   updatedAt  DateTime        @updatedAt
 
@@ -822,6 +831,83 @@ model HkTask {
   @@index([status])
   @@index([bookingId])
   @@index([bedId])
+  @@index([completedAt])
+}
+
+model LinenDelivery {
+  id             String   @id @default(uuid())
+  hotel          Hotel    @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+  hotelId        String
+  deliveredAt    DateTime
+  pillowcases    Int      @default(0)
+  sheets         Int      @default(0)
+  duvetCovers    Int      @default(0)
+  washCost       Int      @default(0)
+  isPaid         Boolean  @default(false)
+  notes          String   @default("")
+  invoicePath    String   @default("")
+  invoiceName    String   @default("")
+  invoiceSize    String   @default("")
+  createdByName  String   @default("")
+  ocrSnapshot    Json?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([hotelId])
+  @@index([deliveredAt])
+}
+
+enum UtilityMeterType {
+  gvs
+  hvs
+  electricity
+}
+
+model UtilityMeter {
+  id        String           @id @default(uuid())
+  hotel     Hotel            @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+  hotelId   String
+  zoneName  String
+  meterType UtilityMeterType
+  sortOrder Int              @default(0)
+  active    Boolean          @default(true)
+  readings  UtilityReading[]
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+
+  @@unique([hotelId, zoneName, meterType])
+  @@index([hotelId])
+}
+
+model UtilityReading {
+  id          String                     @id @default(uuid())
+  meter       UtilityMeter               @relation(fields: [meterId], references: [id], onDelete: Cascade)
+  meterId     String
+  hotelId     String
+  readingDate DateTime                   @db.Date
+  value       Float
+  transmitted Boolean                    @default(false)
+  notes       String                     @default("")
+  attachments UtilityReadingAttachment[]
+  createdAt   DateTime                   @default(now())
+  updatedAt   DateTime                   @updatedAt
+
+  @@unique([meterId, readingDate])
+  @@index([hotelId])
+  @@index([readingDate])
+}
+
+model UtilityReadingAttachment {
+  id        String         @id @default(uuid())
+  reading   UtilityReading @relation(fields: [readingId], references: [id], onDelete: Cascade)
+  readingId String
+  filePath  String
+  fileName  String
+  fileSize  String         @default("")
+  mimeType  String         @default("")
+  createdAt DateTime       @default(now())
+
+  @@index([readingId])
 }
 
 model Channel {

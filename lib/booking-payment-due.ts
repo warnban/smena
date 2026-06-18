@@ -98,7 +98,9 @@ export function prepaidNights(
   if (fromTx != null) return fromTx;
 
   const nightly = bookingNightlyRate(booking);
-  const paid = paidOverride ?? booking.paid;
+  const paid =
+    paidOverride ??
+    (transactions?.length ? accommodationPaidTotal(booking, transactions) : booking.paid);
   if (nightly <= 0 || paid <= 0) return 0;
 
   const exact = paid / nightly;

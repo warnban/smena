@@ -162,7 +162,9 @@ export function BookingModal({
     </button>
   );
 
-  const canCancel = live.status !== "checkedin" && live.status !== "cancelled";
+  const canCancelBooking =
+    live.status !== "checkedin" && live.status !== "checkedout" && live.status !== "cancelled";
+  const canUndoCheckout = live.status === "checkedout";
   const canChangeStatus = live.status !== "checkedin";
 
   return (
@@ -311,16 +313,26 @@ export function BookingModal({
           {live.status === "checkedin" && (
             <>
               <button onClick={() => call(`/api/bookings/${live.id}/checkout`)} disabled={busy} className="flex items-center gap-1.5 px-3.5 py-2 text-white text-[12px] font-bold rounded-lg shadow-sm hover:opacity-90 disabled:opacity-50" style={{ background: "linear-gradient(135deg,#3B82F6,#2563EB)" }}>
-                <LogOut size={13} /> Выписать
+                <LogOut size={13} /> Выселить
               </button>
               <button onClick={() => setStayChangeOpen((v) => !v)} className="flex items-center gap-1.5 px-3.5 py-2 text-[12px] font-bold rounded-lg border border-primary text-primary hover:bg-accent">
                 <CalendarClock size={13} /> Срок проживания
               </button>
             </>
           )}
-          {canCancel && (
+          {canUndoCheckout && (
+            <button
+              onClick={() => call(`/api/bookings/${live.id}/undo-checkout`)}
+              disabled={busy}
+              className="flex items-center gap-1.5 px-3.5 py-2 text-[12px] font-bold rounded-lg"
+              style={{ color: "#2563EB", background: "#EFF6FF", border: "1px solid #BFDBFE" }}
+            >
+              <X size={13} /> Отменить выселение
+            </button>
+          )}
+          {canCancelBooking && (
             <button onClick={() => call(`/api/bookings/${live.id}/status`, { status: "cancelled" })} disabled={busy} className="flex items-center gap-1.5 px-3.5 py-2 text-[12px] font-bold rounded-lg" style={{ color: "#DC2626", background: "#FEF2F2", border: "1px solid #FECACA" }}>
-              <X size={13} /> Отменить
+              <X size={13} /> Отменить бронирование
             </button>
           )}
           <div className="ml-auto flex gap-2">

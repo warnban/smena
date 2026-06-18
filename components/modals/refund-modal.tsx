@@ -8,6 +8,8 @@ import { money, fmtDate } from "@/lib/format";
 
 type RefundCandidate = {
   id: string;
+  hotelId: string;
+  hotelName?: string;
   guestName: string;
   roomNumber: string;
   checkIn: string;
@@ -17,6 +19,7 @@ type RefundCandidate = {
   consumedNights: number;
   refundableNights: number;
   maxRefundAmount: number;
+  canRefund: boolean;
 };
 
 type RefundQuote = {
@@ -30,7 +33,8 @@ type RefundQuote = {
 
 export function RefundModal({ onClose }: { onClose: () => void }) {
   const { hotelId, hotels, pmConfig, refresh } = useApp();
-  const activeHotelId = hotelId === "all" ? (hotels[0]?.id ?? "") : hotelId;
+  const searchHotelId = hotelId || "all";
+  const showHotelInResults = hotelId === "all";
 
   const [query, setQuery] = useState("");
   const [candidates, setCandidates] = useState<RefundCandidate[]>([]);
@@ -51,14 +55,14 @@ export function RefundModal({ onClose }: { onClose: () => void }) {
     : 0;
 
   const loadQuote = useCallback(async () => {
-    if (!selected || !activeHotelId || nights <= 0) {
+    if (!selected || nights <= 0) {
       setQuote(null);
       return;
     }
     setQuoteLoading(true);
     try {
       const params = new URLSearchParams({
-        hotelId: activeHotelId,
+        hotelId: selected.hotelId,
         bookingId: selected.id,
         nights: String(nights),
         withholdNights: String(withholdNights),
@@ -70,7 +74,7 @@ export function RefundModal({ onClose }: { onClose: () => void }) {
     } finally {
       setQuoteLoading(false);
     }
-  }, [selected, activeHotelId, nights, withholdNights]);
+  }, [selected, nights, withholdNights]);
 
   useEffect(() => {
     const t = setTimeout(loadQuote, 200);
@@ -80,12 +84,14 @@ export function RefundModal({ onClose }: { onClose: () => void }) {
   const refundAmount = quote?.refundAmount ?? 0;
 
   const search = useCallback(async (q: string) => {
-    if (!activeHotelId) return;
+    if (!q.trim()) {
+      setCandidates([]);
+      return;
+    }
     setLoading(true);
     setError("");
     try {
-      const params = new URLSearchParams({ hotelId: activeHotelId });
-      if (q.trim()) params.set("q", q.trim());
+      const params = new URLSearchParams({ hotelId: searchHotelId, q: q.trim() });
       const res = await fetch(`/api/refunds/search?${params}`);
       const data = await res.json();
       if (!res.ok) {
@@ -97,7 +103,7 @@ export function RefundModal({ onClose }: { onClose: () => void }) {
     } finally {
       setLoading(false);
     }
-  }, [activeHotelId]);
+  }, [searchHotelId]);
 
   useEffect(() => {
     const t = setTimeout(() => search(query), 300);
@@ -118,7 +124,11 @@ export function RefundModal({ onClose }: { onClose: () => void }) {
   }, [withholdNights, quote, selected, nights]);
 
   async function submit() {
-    if (!selected || !activeHotelId || nights <= 0) return;
+    if (!selected || nights <= 0) return;
+    if (!selected.canRefund || selected.refundableNights <= 0) {
+      setError("Нет доступных ночей для возврата по этой брони");
+      return;
+    }
     setBusy(true);
     setError("");
     try {
@@ -126,7 +136,7 @@ export function RefundModal({ onClose }: { onClose: () => void }) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          hotelId: activeHotelId,
+          hotelId: selected.hotelId,
           bookingId: selected.id,
           nights,
           withholdNights,
@@ -147,15 +157,15 @@ export function RefundModal({ onClose }: { onClose: () => void }) {
   }
 
   const showList = useMemo(
-    () => !selected && (query.length > 0 || candidates.length > 0),
-    [selected, query, candidates.length]
+    () => !selected && query.trim().length > 0,
+    [selected, query]
   );
 
-  if (!activeHotelId) {
+  if (!hotels.length) {
     return (
       <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
         <div className="bg-card rounded-2xl p-6 max-w-sm border border-border text-center">
-          <p className="text-[13px] text-muted-foreground">Выберите конкретный отель для возврата</p>
+          <p className="text-[13px] text-muted-foreground">Нет доступных отелей</p>
           <button onClick={onClose} className="mt-4 px-4 py-2 text-[12px] font-bold rounded-lg bg-muted">Закрыть</button>
         </div>
       </div>
@@ -186,7 +196,7 @@ export function RefundModal({ onClose }: { onClose: () => void }) {
                 <input
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
-                  placeholder="Поиск по имени гостя…"
+                  placeholder="Поиск по имени, телефону или номеру…"
                   className="w-full pl-9 pr-3 py-2.5 text-[13px] rounded-xl border border-border bg-muted outline-none focus:ring-2 focus:ring-ring"
                   autoFocus
                 />
@@ -203,7 +213,11 @@ export function RefundModal({ onClose }: { onClose: () => void }) {
                     >
                       <div className="text-[13px] font-bold text-foreground">{c.guestName}</div>
                       <div className="text-[11px] text-muted-foreground">
-                        №{c.roomNumber} · оплачено {c.prepaidNights} ноч. · к возврату {c.refundableNights} ноч.
+                        {showHotelInResults && c.hotelName ? `${c.hotelName} · ` : ""}
+                        №{c.roomNumber} · оплачено {c.prepaidNights} ноч.
+                        {c.canRefund
+                          ? ` · к возврату ${c.refundableNights} ноч.`
+                          : " · к возврату 0 ноч."}
                       </div>
                     </button>
                   ))}
@@ -238,9 +252,14 @@ export function RefundModal({ onClose }: { onClose: () => void }) {
                   </div>
                   <div className="rounded-lg bg-card p-2 border border-border col-span-2">
                     <div className="text-muted-foreground">Доступно к возврату</div>
-                    <div className="font-black text-success">
+                    <div className={`font-black ${selected.canRefund ? "text-success" : "text-muted-foreground"}`}>
                       {quote?.maxRefundNights ?? selected.refundableNights} ноч. · до {money(selected.maxRefundAmount)}
                     </div>
+                    {!selected.canRefund && (
+                      <p className="text-[10px] text-amber-700 mt-1">
+                        Предоплата уже использована по прожитым ночам. Возврат недоступен.
+                      </p>
+                    )}
                   </div>
                 </div>
               </div>
@@ -339,7 +358,7 @@ export function RefundModal({ onClose }: { onClose: () => void }) {
             <button
               type="button"
               onClick={submit}
-              disabled={busy || nights <= 0 || nights > (quote?.maxRefundNights ?? selected.refundableNights) || refundAmount <= 0}
+              disabled={busy || !selected.canRefund || nights <= 0 || nights > (quote?.maxRefundNights ?? selected.refundableNights) || refundAmount <= 0}
               className="w-full py-2.5 text-white text-[13px] font-bold rounded-xl hover:opacity-90 disabled:opacity-50"
               style={{ background: "linear-gradient(135deg,#EF4444,#DC2626)" }}
             >

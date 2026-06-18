@@ -30,6 +30,12 @@ export async function PATCH(
   const updates: Record<string, unknown> = {};
   if (status && ["pending", "in_progress", "done"].includes(status)) {
     updates.status = status;
+    if (status === "done" && task.status !== "done") {
+      updates.completedAt = new Date();
+    }
+    if (status !== "done" && task.status === "done") {
+      updates.completedAt = null;
+    }
   }
   if (assignee !== undefined) updates.assignee = String(assignee).trim();
   if (priority && ["normal", "high"].includes(priority)) updates.priority = priority;

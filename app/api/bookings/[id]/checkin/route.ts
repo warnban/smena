@@ -32,7 +32,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     return NextResponse.json({ error: "Бронь не найдена" }, { status: 404 });
   }
   if (booking.status === "checkedin" || booking.status === "checkedout") {
-    return NextResponse.json({ error: "Гость уже заселён или выписан" }, { status: 400 });
+    return NextResponse.json({ error: "Гость уже заселён или выселен" }, { status: 400 });
   }
 
   const body = await req.json();

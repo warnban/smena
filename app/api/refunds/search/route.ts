@@ -1,14 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
-import { assertHotelWrite } from "@/lib/permissions";
 import {
   buildRefundQuoteFromContext,
   canRefundBooking,
   loadRefundContext,
 } from "@/lib/booking-refund";
-import { nightsConsumedThrough, prepaidNights } from "@/lib/booking-payment-due";
+import { accommodationPaidTotal, nightsConsumedThrough, prepaidNights } from "@/lib/booking-payment-due";
 import { apiErrorMessage } from "@/lib/api-error";
+import {
+  buildRefundGuestSearchWhere,
+  refundHasPrepaymentFilter,
+  refundSearchStatusFilter,
+  resolveRefundSearchHotelIds,
+} from "@/lib/refund-search.server";
 
 export async function GET(req: NextRequest) {
   try {
@@ -18,55 +23,77 @@ export async function GET(req: NextRequest) {
     }
 
     const hotelId = req.nextUrl.searchParams.get("hotelId");
-    const q = (req.nextUrl.searchParams.get("q") ?? "").trim().toLowerCase();
+    const q = (req.nextUrl.searchParams.get("q") ?? "").trim();
 
-    if (!hotelId) {
-      return NextResponse.json({ error: "hotelId обязателен" }, { status: 400 });
+    if (!q) {
+      return NextResponse.json({ bookings: [] });
     }
 
-    const auth = await assertHotelWrite(session, hotelId);
-    if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status });
+    const hotelsResolved = await resolveRefundSearchHotelIds(session, hotelId);
+    if (!hotelsResolved.ok) {
+      return NextResponse.json({ error: hotelsResolved.error }, { status: hotelsResolved.status });
+    }
 
     const bookings = await prisma.booking.findMany({
       where: {
-        hotelId,
+        hotelId: { in: hotelsResolved.hotelIds },
         hotel: { seatId: session.seatId },
-        status: { in: ["checkedin", "checkedout"] },
-        paid: { gt: 0 },
-        ...(q ? { guestName: { contains: q, mode: "insensitive" } } : {}),
+        ...refundSearchStatusFilter(),
+        ...refundHasPrepaymentFilter(),
+        ...buildRefundGuestSearchWhere(q),
       },
-      include: { room: true },
-      orderBy: { guestName: "asc" },
-      take: 30,
+      include: {
+        room: true,
+        hotel: { select: { name: true } },
+        guest: { select: { name: true, phone: true } },
+      },
+      orderBy: [{ checkIn: "desc" }, { guestName: "asc" }],
+      take: 50,
     });
 
     const results = await Promise.all(
       bookings.map(async (b) => {
-        const ctx = await loadRefundContext(b.id, hotelId, session.seatId!);
+        const ctx = await loadRefundContext(b.id, b.hotelId, session.seatId!);
         if (!ctx) return null;
-        if (!canRefundBooking(ctx.booking, undefined, ctx.transactions, ctx.refundNightsTotal)) return null;
 
-        const consumed = nightsConsumedThrough(ctx.booking);
-        const prepaid = prepaidNights(ctx.booking, undefined, ctx.transactions, ctx.refundNightsTotal);
+        const effectivePaid = accommodationPaidTotal(ctx.booking, ctx.transactions);
+        const bookingPaid = { ...ctx.booking, paid: effectivePaid };
+        const consumed = nightsConsumedThrough(bookingPaid);
+        const prepaid = prepaidNights(bookingPaid, undefined, ctx.transactions, ctx.refundNightsTotal);
         const quote = buildRefundQuoteFromContext(ctx, 1, 0);
+        const maxQuote =
+          quote.maxRefundNights > 0
+            ? buildRefundQuoteFromContext(ctx, quote.maxRefundNights, 0)
+            : quote;
+        const canRefund = canRefundBooking(bookingPaid, undefined, ctx.transactions, ctx.refundNightsTotal);
 
         return {
           id: b.id,
-          guestName: b.guestName,
+          hotelId: b.hotelId,
+          hotelName: b.hotel.name,
+          guestName: b.guestName || b.guest.name,
           roomNumber: b.room.number,
           checkIn: b.checkIn.toISOString(),
           checkOut: b.checkOut.toISOString(),
           amount: b.amount,
-          paid: b.paid,
+          paid: effectivePaid,
           prepaidNights: prepaid,
           consumedNights: consumed,
           refundableNights: quote.maxRefundNights,
-          maxRefundAmount: buildRefundQuoteFromContext(ctx, quote.maxRefundNights, 0).refundAmount,
+          maxRefundAmount: maxQuote.refundAmount,
+          canRefund,
         };
       })
     );
 
-    return NextResponse.json({ bookings: results.filter(Boolean) });
+    const sorted = results
+      .filter(Boolean)
+      .sort((a, b) => {
+        if (a!.canRefund !== b!.canRefund) return a!.canRefund ? -1 : 1;
+        return b!.refundableNights - a!.refundableNights;
+      });
+
+    return NextResponse.json({ bookings: sorted });
   } catch (e) {
     console.error("[refunds/search GET]", e);
     return NextResponse.json({ error: apiErrorMessage(e) }, { status: 500 });

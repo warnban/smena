@@ -1,7 +1,35 @@
 import type { PrismaClient } from "@prisma/client";
 import type { HkTaskCategory } from "@/lib/types";
-import { formatBedDisplay } from "@/lib/dorm";
+import { formatDormPlaceLabel } from "@/lib/dorm";
 import { startOfDay, daysBetween } from "@/lib/housekeeping-utils";
+
+/** Сколько часов задача остаётся в колонке «Готово» */
+export const HK_DONE_VISIBLE_HOURS = 24;
+
+export function formatHkPlaceLabel(roomNumber: string, bedLabel?: string | null): string {
+  if (!bedLabel?.trim()) return roomNumber;
+  return formatDormPlaceLabel(roomNumber, bedLabel);
+}
+
+export function formatHkDoneAge(completedAt: Date | string | null | undefined, updatedAt: Date | string): string {
+  const d = completedAt ? new Date(completedAt) : new Date(updatedAt);
+  if (Number.isNaN(d.getTime())) return "";
+  const hours = Math.floor((Date.now() - d.getTime()) / 3600000);
+  if (hours < 1) return "только что";
+  if (hours < 24) return `${hours} ч`;
+  const days = Math.floor(hours / 24);
+  return `${days} д`;
+}
+
+export function isHkDoneVisible(
+  completedAt: Date | string | null | undefined,
+  updatedAt: Date | string,
+  nowMs = Date.now()
+): boolean {
+  const d = completedAt ? new Date(completedAt) : new Date(updatedAt);
+  if (Number.isNaN(d.getTime())) return false;
+  return nowMs - d.getTime() < HK_DONE_VISIBLE_HOURS * 3600000;
+}
 
 export const HK_CATEGORY_LABELS: Record<HkTaskCategory, string> = {
   checkout: "Выезд",
@@ -125,7 +153,7 @@ export async function syncScheduledCleaning(prisma: PrismaClient, hotelIds: stri
     let roomNumber = room.number;
     if (b.bedId) {
       const bed = await prisma.bed.findUnique({ where: { id: b.bedId }, select: { label: true } });
-      if (bed) roomNumber = formatBedDisplay(bed.label);
+      if (bed) roomNumber = formatHkPlaceLabel(room.number, bed.label);
     }
 
     await maybeCreateScheduledTask(prisma, {

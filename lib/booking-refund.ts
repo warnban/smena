@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import {
   accommodationPaymentTransactions,
+  accommodationPaidTotal,
   bookingNightlyRate,
   nightsConsumedThrough,
   prepaidNights,
@@ -31,8 +32,10 @@ export function canRefundBooking(
   transactions?: Parameters<typeof prepaidNights>[2],
   refundNights = 0
 ): boolean {
-  if (booking.status !== "checkedin" && booking.status !== "checkedout") return false;
-  if (booking.paid <= 0) return false;
+  if (booking.status !== "checkedin" && booking.status !== "checkedout" && booking.status !== "confirmed") {
+    return false;
+  }
+  if (accommodationPaidTotal(booking, transactions) <= 0) return false;
   return refundableNights(booking, dateKey, transactions, refundNights) > 0;
 }
 

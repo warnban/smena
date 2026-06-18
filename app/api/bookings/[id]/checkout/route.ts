@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
 import { assertBookingWrite } from "@/lib/booking-auth.server";
-import { HK_CATEGORY_TYPES, hkTimeNow } from "@/lib/housekeeping";
-import { formatBedDisplay, setBedStatus } from "@/lib/dorm.server";
+import { HK_CATEGORY_TYPES, hkTimeNow, formatHkPlaceLabel } from "@/lib/housekeeping";
+import { setBedStatus } from "@/lib/dorm.server";
 
 export async function POST(_req: NextRequest, { params }: { params: { id: string } }) {
   const auth = await assertBookingWrite(await getSession(), params.id);
@@ -13,7 +13,7 @@ export async function POST(_req: NextRequest, { params }: { params: { id: string
   const bed = booking.bedId
     ? await prisma.bed.findUnique({ where: { id: booking.bedId } })
     : null;
-  const roomNumber = bed ? formatBedDisplay(bed.label) : booking.room.number;
+  const roomNumber = bed ? formatHkPlaceLabel(booking.room.number, bed.label) : booking.room.number;
 
   const now = new Date();
   const time = hkTimeNow();

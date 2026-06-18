@@ -1,6 +1,6 @@
 import "server-only";
 
-import type { DormGender, Gender } from "@prisma/client";
+import type { DormGender, Gender, RoomStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { calcStayAmount } from "@/lib/booking-pricing";
 import { guestGenderMatchesDorm } from "@/lib/dorm.server";
@@ -14,6 +14,9 @@ export type AvailableSlotRow = {
   roomId: string;
   bedId: string | null;
   kind: "private" | "dorm";
+  /** Номер комнаты (родительской для койки) */
+  roomLabel: string;
+  /** Для номера — номер; для койки — метка койки (1/01) */
   number: string;
   category: string;
   floor: number;
@@ -22,7 +25,48 @@ export type AvailableSlotRow = {
   amount: number;
   dormGender: DormGender | null;
   bedLabel: string | null;
+  /** Физический статус места (уборка не блокирует бронирование) */
+  placeStatus: RoomStatus;
 };
+
+async function hasBookingDateOverlap(params: {
+  hotelId: string;
+  checkIn: string;
+  checkOut: string;
+  roomId?: string;
+  bedId?: string;
+  excludeBookingId?: string;
+}): Promise<boolean> {
+  const checkInDate = parseMskDateKey(params.checkIn);
+  const checkOutDate = parseMskDateKey(params.checkOut);
+
+  const bookingWhere = {
+    hotelId: params.hotelId,
+    status: { in: [...BLOCKING_BOOKING_STATUSES] },
+    checkIn: { lt: checkOutDate },
+    checkOut: { gt: checkInDate },
+    ...(params.excludeBookingId ? { id: { not: params.excludeBookingId } } : {}),
+    ...(params.bedId ? { bedId: params.bedId } : { bedId: null, roomId: params.roomId }),
+  };
+
+  const [bookingHit, orgHit] = await Promise.all([
+    prisma.booking.findFirst({ where: bookingWhere, select: { id: true } }),
+    params.bedId
+      ? Promise.resolve(null)
+      : prisma.organizationStayRoom.findFirst({
+          where: {
+            roomId: params.roomId,
+            status: "active",
+            checkIn: { lt: checkOutDate },
+            checkOut: { gt: checkInDate },
+            organizationStay: { status: "active", hotelId: params.hotelId },
+          },
+          select: { id: true },
+        }),
+  ]);
+
+  return Boolean(bookingHit || orgHit);
+}
 
 function dateRangesOverlap(aIn: string, aOut: string, bIn: string, bOut: string): boolean {
   return aIn < bOut && bIn < aOut;
@@ -119,6 +163,7 @@ export async function findAvailableRooms(params: {
           roomId: room.id,
           bedId: bed.id,
           kind: "dorm",
+          roomLabel: room.number,
           number: bed.label,
           category: room.category,
           floor: room.floor,
@@ -131,6 +176,7 @@ export async function findAvailableRooms(params: {
           }),
           dormGender: room.dormGender,
           bedLabel: bed.label,
+          placeStatus: bed.status,
         });
       }
       continue;
@@ -143,6 +189,7 @@ export async function findAvailableRooms(params: {
       roomId: room.id,
       bedId: null,
       kind: "private",
+      roomLabel: room.number,
       number: room.number,
       category: room.category,
       floor: room.floor,
@@ -155,6 +202,7 @@ export async function findAvailableRooms(params: {
       }),
       dormGender: null,
       bedLabel: null,
+      placeStatus: room.status,
     });
   }
 
@@ -216,19 +264,31 @@ export async function resolveRoomForBooking(params: {
   });
 
   if (params.bedId) {
-    const slot = available.find((s) => s.bedId === params.bedId);
-    if (!slot) {
-      return { ok: false, error: "Койко-место недоступно на выбранные даты или не подходит по полу" };
-    }
-    const room = await prisma.room.findFirst({
-      where: { id: slot.roomId, hotelId: params.hotelId, hotel: { seatId: params.seatId } },
+    const bed = await prisma.bed.findFirst({
+      where: {
+        id: params.bedId,
+        room: { hotelId: params.hotelId, hotel: { seatId: params.seatId } },
+      },
+      include: { room: true },
     });
-    if (!room) return { ok: false, error: "Комната не найдена" };
+    if (!bed) return { ok: false, error: "Койко-место не найдено" };
+    if (bed.status === "maintenance" || bed.room.status === "maintenance") {
+      return { ok: false, error: "Койко-место на ремонте" };
+    }
+    if (!guestGenderMatchesDorm(guestGender, bed.room.dormGender)) {
+      return {
+        ok: false,
+        error: `Комната ${bed.room.number} — ${bed.room.dormGender === "male" ? "мужская" : "женская"}, пол гостя не подходит`,
+      };
+    }
+    if (await hasBookingDateOverlap({ hotelId: params.hotelId, checkIn, checkOut, bedId: bed.id })) {
+      return { ok: false, error: "Койко-место занято на выбранные даты" };
+    }
     return {
       ok: true,
-      room,
-      bedId: slot.bedId,
-      bedLabel: slot.bedLabel,
+      room: bed.room,
+      bedId: bed.id,
+      bedLabel: bed.label,
       nights,
       autoPicked: false,
     };
@@ -240,6 +300,10 @@ export async function resolveRoomForBooking(params: {
       include: { beds: true },
     });
     if (!room) return { ok: false, error: "Номер не найден" };
+
+    if (room.status === "maintenance") {
+      return { ok: false, error: `Номер ${room.number} на ремонте` };
+    }
 
     if (room.kind === "dorm") {
       if (!guestGenderMatchesDorm(guestGender, room.dormGender)) {
@@ -262,7 +326,7 @@ export async function resolveRoomForBooking(params: {
       };
     }
 
-    if (!available.some((s) => s.roomId === room.id && !s.bedId)) {
+    if (await hasBookingDateOverlap({ hotelId: params.hotelId, checkIn, checkOut, roomId: room.id })) {
       return { ok: false, error: `Номер ${room.number} занят на ${checkIn} — ${checkOut}` };
     }
     return { ok: true, room, bedId: null, bedLabel: null, nights, autoPicked: false };
@@ -271,6 +335,10 @@ export async function resolveRoomForBooking(params: {
   if (params.roomNumber?.trim()) {
     const q = params.roomNumber.trim().toLowerCase();
     const match =
+      available.find((s) => s.bedId && s.number.toLowerCase() === q) ??
+      available.find((s) => s.bedId && s.number.toLowerCase().includes(q)) ??
+      available.find((s) => !s.bedId && s.roomLabel.toLowerCase() === q) ??
+      available.find((s) => !s.bedId && s.roomLabel.toLowerCase().includes(q)) ??
       available.find((s) => s.number.toLowerCase() === q) ??
       available.find((s) => s.number.toLowerCase().includes(q));
     if (!match) {

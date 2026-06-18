@@ -297,6 +297,8 @@ export interface HkTask {
   time: string;
   est: string;
   createdAt?: string;
+  completedAt?: string | null;
+  updatedAt?: string;
 }
 
 export interface Channel {

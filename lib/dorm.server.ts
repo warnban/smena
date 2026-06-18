@@ -2,11 +2,10 @@ import "server-only";
 
 import type { DormGender, Gender, RoomStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { guestGenderMatchesDorm, formatBedDisplay } from "@/lib/dorm";
-
+import { guestGenderMatchesDorm, formatBedDisplay, formatDormPlaceLabel } from "@/lib/dorm";
 import { DORM_GENDER_LABELS, ROOM_KIND_LABELS } from "@/lib/constants";
 
-export { DORM_GENDER_LABELS, ROOM_KIND_LABELS, guestGenderMatchesDorm, formatBedDisplay };
+export { DORM_GENDER_LABELS, ROOM_KIND_LABELS, guestGenderMatchesDorm, formatBedDisplay, formatDormPlaceLabel };
 
 export async function syncDormRoomStatus(roomId: string): Promise<RoomStatus> {
   const room = await prisma.room.findUnique({

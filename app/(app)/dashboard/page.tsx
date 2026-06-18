@@ -232,7 +232,7 @@ export default function DashboardPage() {
             className="flex items-center gap-2 px-4 py-2 text-white text-[13px] font-bold rounded-xl shadow-sm hover:opacity-90"
             style={{ background: "linear-gradient(135deg,#6366F1,#4F46E5)" }}
           >
-            <LogOut size={14} /> Выписать {departures.length > 0 && `(${departures.length})`}
+            <LogOut size={14} /> Выселить {departures.length > 0 && `(${departures.length})`}
           </button>
           <button
             onClick={() => setShowRelocate(true)}
@@ -359,7 +359,7 @@ export default function DashboardPage() {
                     key={b.id}
                     booking={b}
                     roomNumber={room?.number}
-                    btnLabel="Выписать"
+                    btnLabel="Выселить"
                     btnColor="#3B82F6"
                     onAction={() => { setSelBooking(b); setBookingTab("details"); }}
                   />

@@ -5,7 +5,7 @@ import { X, Globe, AlertTriangle } from "lucide-react";
 import { useApp } from "@/components/providers/app-data";
 import { money, dayDiff } from "@/lib/format";
 import { DORM_GENDER_LABELS, SOURCE } from "@/lib/constants";
-import { guestGenderMatchesDorm } from "@/lib/dorm";
+import { formatBookingPlaceOptionLabel, guestGenderMatchesDorm } from "@/lib/dorm";
 import { DatePicker } from "@/components/ui/date-picker";
 import { PhoneInput, getPhoneError } from "@/components/ui/phone-input";
 import { Select } from "@/components/ui/select";
@@ -21,19 +21,23 @@ type AvailSlot = {
   roomId: string;
   bedId: string | null;
   kind: "private" | "dorm";
+  roomLabel: string;
   number: string;
   bedLabel: string | null;
+  category: string;
+  floor: number;
   price: number;
+  dormGender: "male" | "female" | "mixed" | null;
+  placeStatus?: "available" | "occupied" | "cleaning" | "checkout" | "maintenance";
 };
 
 export function NewBookingModal({ onClose, onCreated }: Props) {
-  const { hotels, rooms, guests, hotelId, refresh } = useApp();
+  const { hotels, rooms, guests, hotelId, refresh, getCategoryLabel } = useApp();
 
   const activeHotel = hotelId !== "all" ? hotels.find((h) => h.id === hotelId) : null;
   const activeHotelId = activeHotel?.id ?? "";
 
-  const [roomId, setRoomId] = useState("");
-  const [bedId, setBedId] = useState("");
+  const [placeId, setPlaceId] = useState("");
   const [selectedGuestId, setSelectedGuestId] = useState("");
   const [guestName, setGuestName] = useState("");
   const [phone, setPhone] = useState("");
@@ -53,11 +57,6 @@ export function NewBookingModal({ onClose, onCreated }: Props) {
   const [availSlots, setAvailSlots] = useState<AvailSlot[]>([]);
   const [availLoading, setAvailLoading] = useState(false);
 
-  const hotelRooms = useMemo(
-    () => (activeHotelId ? rooms.filter((r) => r.hotelId === activeHotelId && r.status !== "maintenance") : []),
-    [rooms, activeHotelId]
-  );
-
   const guestMatches = useMemo(() => {
     const q = guestName.toLowerCase().trim();
     if (q.length < 2) return [];
@@ -74,8 +73,9 @@ export function NewBookingModal({ onClose, onCreated }: Props) {
   const selectedGuest = guests.find((g) => g.id === selectedGuestId);
   const showGuestSuggestions = guestName.trim().length >= 2 && !selectedGuestId && guestMatches.length > 0;
 
-  const selectedRoom = hotelRooms.find((r) => r.id === roomId);
-  const isDorm = selectedRoom?.kind === "dorm";
+  const selectedSlot = availSlots.find((s) => s.id === placeId);
+  const selectedRoom = selectedSlot ? rooms.find((r) => r.id === selectedSlot.roomId) : undefined;
+  const isDorm = selectedSlot?.kind === "dorm";
 
   const nights = useMemo(() => {
     if (!checkIn || !checkOut) return 0;
@@ -90,15 +90,28 @@ export function NewBookingModal({ onClose, onCreated }: Props) {
     !guestGenderMatchesDorm(selectedGuest.gender, selectedRoom.dormGender)
   );
 
-  const dormBedOptions = useMemo(() => {
-    if (!isDorm || !roomId) return [];
-    return availSlots
-      .filter((s) => s.roomId === roomId && s.bedId)
-      .map((s) => ({
-        value: s.bedId!,
-        label: `№${s.bedLabel ?? s.bedId}`,
-      }));
-  }, [availSlots, isDorm, roomId]);
+  const placeOptions = useMemo(() => {
+    const sorted = [...availSlots].sort((a, b) => {
+      const floorDiff = (a.floor ?? 0) - (b.floor ?? 0);
+      if (floorDiff !== 0) return floorDiff;
+      if (a.kind !== b.kind) return a.kind === "private" ? -1 : 1;
+      return a.number.localeCompare(b.number, "ru", { numeric: true });
+    });
+
+    return sorted.map((s) => ({
+      value: s.id,
+      label: formatBookingPlaceOptionLabel({
+        kind: s.kind,
+        roomLabel: s.roomLabel,
+        number: s.number,
+        bedLabel: s.bedLabel,
+        category: getCategoryLabel(s.category),
+        price: s.price,
+        money,
+        placeStatus: s.placeStatus,
+      }),
+    }));
+  }, [availSlots, getCategoryLabel]);
 
   useEffect(() => {
     if (!activeHotelId || !checkIn || !checkOut || new Date(checkOut) <= new Date(checkIn)) {
@@ -132,38 +145,12 @@ export function NewBookingModal({ onClose, onCreated }: Props) {
   }, [activeHotelId, checkIn, checkOut, selectedGuestId]);
 
   useEffect(() => {
-    setBedId("");
-  }, [roomId]);
-
-  useEffect(() => {
-    if (isDorm && dormBedOptions.length === 1 && !bedId) {
-      setBedId(dormBedOptions[0]!.value);
+    if (placeId && !availSlots.some((s) => s.id === placeId)) {
+      setPlaceId("");
     }
-  }, [isDorm, dormBedOptions, bedId]);
+  }, [availSlots, placeId]);
 
-  const availableRoomOptions = useMemo(() => {
-    const availRoomIds = new Set(availSlots.map((s) => s.roomId));
-    return hotelRooms
-      .filter((r) => {
-        if (r.kind === "dorm") {
-          if (genderMismatch && r.id === roomId) return true;
-          return availRoomIds.has(r.id);
-        }
-        return availRoomIds.has(r.id) || r.status === "available";
-      })
-      .map((r) => {
-        const isD = r.kind === "dorm";
-        const genderSuffix = isD && r.dormGender ? ` · ${DORM_GENDER_LABELS[r.dormGender]}` : "";
-        return {
-          value: r.id,
-          label: isD
-            ? `Комната ${r.number}${genderSuffix} · ${money(r.price)}/койка`
-            : `№${r.number} · ${r.category} · ${money(r.price)}/сут.`,
-        };
-      });
-  }, [hotelRooms, availSlots, genderMismatch, roomId]);
-
-  const calcAmount = selectedRoom ? selectedRoom.price * nights : 0;
+  const calcAmount = selectedSlot ? selectedSlot.price * nights : 0;
   const amount = calcAmount;
 
   function pickGuest(g: Guest) {
@@ -172,8 +159,7 @@ export function NewBookingModal({ onClose, onCreated }: Props) {
     setPhone(g.phone);
     setEmail(g.email);
     setIsForeigner(g.isForeigner);
-    setRoomId("");
-    setBedId("");
+    setPlaceId("");
   }
 
   function onGuestNameChange(value: string) {
@@ -182,8 +168,7 @@ export function NewBookingModal({ onClose, onCreated }: Props) {
       const current = guests.find((g) => g.id === selectedGuestId);
       if (!current || value.trim() !== current.name) {
         setSelectedGuestId("");
-        setRoomId("");
-        setBedId("");
+        setPlaceId("");
       }
     }
   }
@@ -195,12 +180,8 @@ export function NewBookingModal({ onClose, onCreated }: Props) {
       setError("Выберите конкретный отель в переключателе слева");
       return;
     }
-    if (!roomId) {
-      setError("Выберите номер или комнату");
-      return;
-    }
-    if (isDorm && !bedId) {
-      setError("Выберите койко-место");
+    if (!selectedSlot) {
+      setError("Выберите номер или койко-место");
       return;
     }
     if (genderMismatch) {
@@ -231,8 +212,8 @@ export function NewBookingModal({ onClose, onCreated }: Props) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           hotelId: activeHotelId,
-          roomId,
-          bedId: isDorm ? bedId : undefined,
+          roomId: selectedSlot.roomId,
+          bedId: selectedSlot.bedId ?? undefined,
           guestId: selectedGuestId || undefined,
           guestName: guestName.trim() || selectedGuest?.name,
           phone,
@@ -331,49 +312,35 @@ export function NewBookingModal({ onClose, onCreated }: Props) {
 
           <div>
             <label className="text-[11px] font-bold text-muted-foreground block mb-1">
-              {isDorm ? "Общая комната" : "Номер"}
+              Номер / койко-место
               {availLoading && <span className="font-normal text-muted-foreground ml-1">· проверка…</span>}
             </label>
-            <Select
-              value={roomId}
-              onChange={setRoomId}
-              disabled={!activeHotel}
-              placeholder="Выберите номер или комнату"
-              options={availableRoomOptions}
-            />
+            {genderMismatch ? (
+              <div className="flex items-start gap-2 p-3 rounded-xl text-[12px] bg-destructive/10 border border-destructive/30 text-destructive">
+                <AlertTriangle size={14} className="flex-shrink-0 mt-0.5" />
+                <span>
+                  {selectedRoom?.dormGender === "male"
+                    ? "Мужская комната — выберите другое место для этого гостя"
+                    : "Женская комната — выберите другое место для этого гостя"}
+                </span>
+              </div>
+            ) : placeOptions.length === 0 && !availLoading ? (
+              <p className="text-[12px] text-muted-foreground px-1">Нет свободных мест на выбранные даты</p>
+            ) : (
+              <Select
+                value={placeId}
+                onChange={setPlaceId}
+                disabled={!activeHotel || availLoading}
+                placeholder="Выберите номер"
+                options={placeOptions}
+              />
+            )}
             {isDorm && selectedRoom?.dormGender && (
               <p className="text-[11px] text-muted-foreground mt-1">
-                {DORM_GENDER_LABELS[selectedRoom.dormGender]} комната
+                {DORM_GENDER_LABELS[selectedRoom.dormGender]} общая комната
               </p>
             )}
           </div>
-
-          {isDorm && roomId && (
-            <div>
-              <label className="text-[11px] font-bold text-muted-foreground block mb-1">Койко-место</label>
-              {genderMismatch ? (
-                <div className="flex items-start gap-2 p-3 rounded-xl text-[12px] bg-destructive/10 border border-destructive/30 text-destructive">
-                  <AlertTriangle size={14} className="flex-shrink-0 mt-0.5" />
-                  <span>
-                    {selectedRoom?.dormGender === "male"
-                      ? "Мужская комната — выберите другую комнату для этого гостя"
-                      : "Женская комната — выберите другую комнату для этого гостя"}
-                  </span>
-                </div>
-              ) : dormBedOptions.length === 0 ? (
-                <p className="text-[12px] text-muted-foreground px-1">
-                  {availLoading ? "Загрузка свободных мест…" : "Нет свободных мест на выбранные даты"}
-                </p>
-              ) : (
-                <Select
-                  value={bedId}
-                  onChange={setBedId}
-                  placeholder="Выберите место"
-                  options={dormBedOptions}
-                />
-              )}
-            </div>
-          )}
 
           <div className="grid grid-cols-2 gap-3">
             <div>
@@ -442,8 +409,8 @@ export function NewBookingModal({ onClose, onCreated }: Props) {
           <div className="text-[13px]">
             <span className="text-muted-foreground">Итого: </span>
             <span className="font-black text-foreground">{money(amount)}</span>
-            {isDorm && selectedRoom && (
-              <span className="text-[11px] text-muted-foreground ml-1">({money(selectedRoom.price)}/койка)</span>
+            {isDorm && selectedSlot && (
+              <span className="text-[11px] text-muted-foreground ml-1">({money(selectedSlot.price)}/койка)</span>
             )}
           </div>
           <div className="flex gap-2">

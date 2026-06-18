@@ -19,10 +19,11 @@ import { DailyReportPanel } from "@/components/reports/daily-report-panel";
 import { ShiftHandoverPanel } from "@/components/reports/shift-handover-panel";
 import { MonthComparisonPanel } from "@/components/reports/month-comparison-panel";
 import { TransactionsPanel } from "@/components/reports/transactions-panel";
+import { MetersPanel } from "@/components/reports/meters-panel";
 
 export default function ReportsPage() {
   const { transactions, hotelId, bookings, rooms, hotels, pmConfig, transactionCategories, refresh, loading, canManageSettings } = useApp();
-  const [tab, setTab] = useState<"analytics" | "finance" | "shift" | "daily" | "salaries" | "transactions">("analytics");
+  const [tab, setTab] = useState<"analytics" | "finance" | "shift" | "daily" | "salaries" | "transactions" | "meters">("analytics");
   const [analyticsView, setAnalyticsView] = useState<"overview" | "comparison">("overview");
   const [pmVis, setPmVis] = useState<Record<string, boolean>>({});
   const [txPresetMethod, setTxPresetMethod] = useState<string | null>(null);
@@ -117,7 +118,7 @@ export default function ReportsPage() {
     <>
       <TopBar title="Отчёты и аналитика" />
       <div className="bg-card px-6 flex gap-1 border-b border-border flex-wrap">
-        {[["analytics", "Аналитика"], ["finance", "Финансы"], ["shift", "Пересменка"], ["daily", "Ежедневный"], ["salaries", "Зарплаты"], ["transactions", "Транзакции"]].map(([t, l]) => (
+        {[["analytics", "Аналитика"], ["finance", "Финансы"], ["shift", "Пересменка"], ["daily", "Ежедневный"], ["salaries", "Зарплаты"], ["transactions", "Транзакции"], ["meters", "Счётчики"]].map(([t, l]) => (
           <button key={t} onClick={() => setTab(t as typeof tab)} className={`px-4 py-3 text-[13px] font-semibold transition-all ${tab === t ? "text-primary border-b-2 border-primary" : "text-muted-foreground hover:text-foreground"}`}>{l}</button>
         ))}
       </div>
@@ -295,6 +296,18 @@ export default function ReportsPage() {
             onRefresh={refresh}
             presetMethod={txPresetMethod}
           />
+        )}
+
+        {tab === "meters" && (
+          activeHotelId ? (
+            <MetersPanel
+              hotelId={activeHotelId}
+              hotelName={activeHotelName}
+              canManageZones={canManageSettings}
+            />
+          ) : (
+            <p className="text-sm text-muted-foreground">Выберите отель для учёта счётчиков</p>
+          )
         )}
       </div>
 

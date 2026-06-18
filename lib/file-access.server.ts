@@ -56,5 +56,29 @@ export async function assertStorageFileAccess(
     return refund ? { ok: true } : { ok: false, error: "Not found", status: 404 };
   }
 
+  if (kind === "linen") {
+    const hotelId = parts[2];
+    if (!hotelId || !UUID.test(hotelId)) {
+      return { ok: false, error: "Not found", status: 404 };
+    }
+    const hotel = await prisma.hotel.findFirst({
+      where: { id: hotelId, seatId },
+      select: { id: true },
+    });
+    return hotel ? { ok: true } : { ok: false, error: "Not found", status: 404 };
+  }
+
+  if (kind === "meters") {
+    const readingId = parts[2];
+    if (!readingId || !UUID.test(readingId)) {
+      return { ok: false, error: "Not found", status: 404 };
+    }
+    const reading = await prisma.utilityReading.findFirst({
+      where: { id: readingId, meter: { hotel: { seatId } } },
+      select: { id: true },
+    });
+    return reading ? { ok: true } : { ok: false, error: "Not found", status: 404 };
+  }
+
   return { ok: false, error: "Forbidden", status: 403 };
 }

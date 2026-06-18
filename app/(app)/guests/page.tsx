@@ -22,6 +22,7 @@ import { StayAmendmentPrintModal } from "@/components/modals/stay-amendment-prin
 import type { Guest, GuestDocument, StayAmendment } from "@/lib/types";
 
 import { PRIMARY_DOC_LABELS, normalizeDocType, getDocTypeConfig } from "@/lib/document-types";
+import { formatDormPlaceLabel } from "@/lib/dorm";
 
 const NATIONALITY_FLAGS: Record<string, string> = {
   RU: "🇷🇺", DE: "🇩🇪", CN: "🇨🇳", AE: "🇦🇪", GB: "🇬🇧", US: "🇺🇸", FR: "🇫🇷", IT: "🇮🇹",
@@ -52,7 +53,7 @@ function InfoRow({ label, value, warn }: { label: string; value?: string; warn?:
 }
 
 export default function GuestsPage() {
-  const { guests, bookings, rooms, transactions, pmConfig, hotelId, loading, refresh, getCategoryLabel, canManageSettings } = useApp();
+  const { guests, bookings, rooms, beds, transactions, pmConfig, hotelId, loading, refresh, getCategoryLabel, canManageSettings } = useApp();
   const [search, setSearch] = useState("");
   const [foreignerF, setForeignerF] = useState<"all" | "yes" | "no">("all");
   const [scanF, setScanF] = useState<"all" | "yes" | "no">("all");
@@ -201,6 +202,7 @@ export default function GuestsPage() {
   }, [selected, scopedBookings, scopedTransactions]);
   const currentStay = selected ? currentStayByGuest.get(selected.id) : undefined;
   const currentRoom = currentStay ? rooms.find((r) => r.id === currentStay.roomId) : undefined;
+  const currentBed = currentStay?.bedId ? beds.find((b) => b.id === currentStay.bedId) : undefined;
 
   useEffect(() => {
     if (selected) {
@@ -337,15 +339,15 @@ export default function GuestsPage() {
               </button>
             </div>
             <div className="flex-1 overflow-y-auto p-4 md:p-5 space-y-4 custom-scrollbar">
-            <div className="bg-card rounded-xl p-4 flex items-start justify-between border border-border">
-              <div className="flex items-center gap-4">
-                <div className="w-14 h-14 rounded-2xl flex items-center justify-center text-[18px] font-black shadow-sm relative" style={{ background: selected.vip ? "linear-gradient(135deg,#FEF3C7,#FDE68A)" : "linear-gradient(135deg,#EFF6FF,#DBEAFE)", color: selected.vip ? "#D97706" : "#2563EB" }}>
+            <div className="bg-card rounded-xl p-4 border border-border space-y-4">
+              <div className="flex items-start gap-3 min-w-0">
+                <div className="w-14 h-14 rounded-2xl flex items-center justify-center text-[18px] font-black shadow-sm relative flex-shrink-0" style={{ background: selected.vip ? "linear-gradient(135deg,#FEF3C7,#FDE68A)" : "linear-gradient(135deg,#EFF6FF,#DBEAFE)", color: selected.vip ? "#D97706" : "#2563EB" }}>
                   {inits(selected.name)}
                   <div className="absolute -bottom-1 -right-1 text-[16px] leading-none">{NATIONALITY_FLAGS[selected.nationality] ?? "🌐"}</div>
                 </div>
-                <div>
+                <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <h2 className="text-[16px] font-black text-foreground">{selected.lastName} {selected.firstName} {selected.middleName}</h2>
+                    <h2 className="text-[16px] font-black text-foreground break-words">{selected.lastName} {selected.firstName} {selected.middleName}</h2>
                     {selected.vip && <span className="text-[10px] font-black px-2 py-0.5 rounded-full" style={{ background: "#FEF3C7", color: "#D97706", border: "1px solid #FDE68A" }}>⭐ VIP</span>}
                   </div>
                   <div className="flex items-center gap-2 mt-1.5 flex-wrap">
@@ -362,8 +364,9 @@ export default function GuestsPage() {
                     )}
                   </div>
                 </div>
+                <button onClick={() => setSelected(null)} className="hidden md:flex p-2 rounded-xl text-muted-foreground border border-border hover:bg-muted flex-shrink-0" title="Свернуть анкету"><PanelRightClose size={16} /></button>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <button onClick={() => setEditGuest(selected)} className="flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-bold rounded-xl text-primary border border-primary/30"><Edit2 size={12} /> Редактировать</button>
                 {canManageSettings && (
                   <button
@@ -375,7 +378,6 @@ export default function GuestsPage() {
                     <Trash2 size={12} /> Удалить
                   </button>
                 )}
-                <button onClick={() => setSelected(null)} className="p-2 rounded-xl text-muted-foreground border border-border hover:bg-muted" title="Свернуть анкету"><PanelRightClose size={16} /></button>
               </div>
             </div>
 
@@ -386,7 +388,11 @@ export default function GuestsPage() {
                 </div>
                 <div className="flex-1">
                   <p className="text-[10px] font-bold text-success uppercase tracking-wider mb-0.5">Сейчас проживает</p>
-                  <p className="text-[15px] font-black text-foreground">Номер №{currentRoom.number} · {getCategoryLabel(currentRoom.category)}</p>
+                  <p className="text-[15px] font-black text-foreground">
+                    {currentRoom?.kind === "dorm" && currentBed
+                      ? `Койка ${formatDormPlaceLabel(currentRoom.number, currentBed.label)} · ${getCategoryLabel(currentRoom.category)}`
+                      : `${currentRoom?.number ?? "—"} · ${getCategoryLabel(currentRoom?.category ?? "")}`}
+                  </p>
                   <p className="text-[12px] text-muted-foreground mt-0.5">{fmtDate(currentStay.checkIn, true)} — {fmtDate(currentStay.checkOut, true)} · {dayDiff(currentStay.checkIn, currentStay.checkOut)} ночей</p>
                 </div>
               </div>

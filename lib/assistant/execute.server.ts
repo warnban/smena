@@ -6,7 +6,7 @@ import { assertHotelWrite } from "@/lib/permissions";
 import { assertPaymentsOpen } from "@/lib/payment-lock";
 import { OTA_PAYMENT_CODE } from "@/lib/finance";
 import { calcStayAmount } from "@/lib/booking-pricing";
-import { guestGenderMatchesDorm, formatBedDisplay } from "@/lib/dorm.server";
+import { guestGenderMatchesDorm, formatBedDisplay, formatDormPlaceLabel } from "@/lib/dorm.server";
 import { findAvailableRooms } from "@/lib/booking-availability.server";
 import {
   firstUnpaidNightDateKey,
@@ -430,7 +430,11 @@ async function executeCreateBooking(session: SessionPayload, payload: Record<str
   });
 
   const bed = bedId ? await prisma.bed.findUnique({ where: { id: bedId } }) : null;
-  const place = bed ? formatBedDisplay(bed.label) : room.number;
+  const place = bed && room.kind === "dorm"
+    ? formatDormPlaceLabel(room.number, bed.label)
+    : bed
+      ? formatBedDisplay(bed.label)
+      : room.number;
 
   return {
     ok: true as const,

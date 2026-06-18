@@ -104,7 +104,7 @@ export function QueueModal({
                           className="flex items-center gap-1 px-2.5 py-1.5 text-white text-[11px] font-bold rounded-lg hover:opacity-90"
                           style={{ background: "linear-gradient(135deg,#6366F1,#4F46E5)" }}
                         >
-                          <LogOut size={12} /> Выписать
+                          <LogOut size={12} /> Выселить
                         </button>
                         <button
                           onClick={() => { setStayChangeMode(true); setSelBooking(b); }}

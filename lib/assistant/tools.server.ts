@@ -14,6 +14,7 @@ import { calcStayAmount } from "@/lib/booking-pricing";
 import { buildRefundQuoteFromContext, canRefundBooking, loadRefundContext } from "@/lib/booking-refund";
 import { mskDateKey, mskNightDiff, mskAddDays, parseMskDateKey } from "@/lib/msk-time";
 import { findAvailableRooms, resolveRoomForBooking } from "@/lib/booking-availability.server";
+import { formatDormPlaceLabel } from "@/lib/dorm";
 import { hotelHasDiscountRules, formatRuleLabel, matchDiscountRule, calcPaymentWithRule, calcNightPaymentTotal, activeRulesForHotel } from "@/lib/hotel-discount-rules";
 import { searchFaqChunks } from "@/lib/assistant/faq.server";
 import type { PendingAction } from "@/lib/assistant/types";
@@ -196,7 +197,7 @@ export const ASSISTANT_TOOLS = [
     function: {
       name: "find_available_rooms",
       description:
-        "Свободные номера на даты заезда/выезда. Используй перед бронью, если админ не назвал номер или просит «любой свободный».",
+        "Свободные места на даты: отдельные номера (kind=private) и койко-места в общих комнатах (kind=dorm, placeLabel вида 1/01). Перед бронью в общей комнате всегда выбирай конкретное койко-место (bedId).",
       parameters: {
         type: "object",
         properties: {
@@ -205,7 +206,8 @@ export const ASSISTANT_TOOLS = [
           checkOut: { type: "string", description: "YYYY-MM-DD" },
           nights: { type: "number", description: "Альтернатива checkOut: ночей от checkIn" },
           category: { type: "string", description: "Фильтр по категории (Double, Single…)" },
-          roomNumber: { type: "string", description: "Поиск по номеру" },
+          roomNumber: { type: "string", description: "Номер комнаты (16, VIP) или метка койки (1/01)" },
+          bedNumber: { type: "string", description: "Метка койко-места в общей комнате, например 1/01" },
           guestId: { type: "string", description: "Для фильтра общих комнат по полу гостя" },
           guestGender: { type: "string", description: "M или F — для подбора общей комнаты" },
           limit: { type: "number" },
@@ -219,7 +221,7 @@ export const ASSISTANT_TOOLS = [
     function: {
       name: "propose_create_booking",
       description:
-        "Предложить создать бронь (требует подтверждения). Номер можно не указывать — подберётся первый свободный.",
+        "Предложить создать бронь (требует подтверждения). В общей комнате (dorm) бронируй койко-место: передай bedId или bedNumber (1/01), не roomId общей комнаты без койки.",
       parameters: {
         type: "object",
         properties: {
@@ -230,7 +232,8 @@ export const ASSISTANT_TOOLS = [
           checkOut: { type: "string", description: "YYYY-MM-DD" },
           nights: { type: "number", description: "Альтернатива checkOut" },
           roomId: { type: "string" },
-          roomNumber: { type: "string", description: "Номер комнаты, например 101" },
+          roomNumber: { type: "string", description: "Номер комнаты (101, VIP) — только для отдельных номеров" },
+          bedNumber: { type: "string", description: "Метка койко-места в общей комнате (1/01, 1/02)" },
           anyAvailable: {
             type: "boolean",
             description: "true — любой свободный номер (по умолчанию, если roomId/roomNumber не заданы)",
@@ -644,15 +647,24 @@ export async function runAssistantTool(
           nights: n,
           count: rooms.length,
           rooms: rooms.map((r) => ({
+            placeId: r.id,
             roomId: r.roomId,
             bedId: r.bedId,
             kind: r.kind,
             dormGender: r.dormGender,
-            number: r.number,
+            placeLabel:
+              r.kind === "dorm"
+                ? formatDormPlaceLabel(r.roomLabel, r.bedLabel ?? r.number)
+                : r.roomLabel,
+            parentRoom: r.kind === "dorm" ? r.roomLabel : null,
             category: r.category,
             floor: r.floor,
             pricePerNight: r.price,
             amount: r.amount,
+            bookingHint:
+              r.kind === "dorm"
+                ? "Общая комната: бронь только на это койко-место (передай bedId в propose_create_booking)"
+                : "Отдельный номер целиком",
           })),
         },
       };
@@ -682,7 +694,12 @@ export async function runAssistantTool(
         checkOut,
         roomId: args.roomId ? String(args.roomId) : undefined,
         bedId: args.bedId ? String(args.bedId) : undefined,
-        roomNumber: args.roomNumber ? String(args.roomNumber) : undefined,
+        roomNumber:
+          args.bedNumber
+            ? String(args.bedNumber)
+            : args.roomNumber
+              ? String(args.roomNumber)
+              : undefined,
         anyAvailable: args.anyAvailable !== false,
         category: args.category ? String(args.category) : undefined,
         guestId: args.guestId ? String(args.guestId) : undefined,
@@ -692,6 +709,14 @@ export async function runAssistantTool(
       if (!resolved.ok) return { result: { error: resolved.error } };
 
       const { room, bedId, bedLabel, nights, autoPicked } = resolved;
+      if (room.kind === "dorm" && !bedId) {
+        return {
+          result: {
+            error:
+              "Для общей комнаты нужно койко-место: укажите bedId/bedNumber (1/01) или вызовите find_available_rooms",
+          },
+        };
+      }
       const amount = calcStayAmount({
         roomPrice: room.price,
         checkIn: new Date(checkIn),
@@ -701,7 +726,10 @@ export async function runAssistantTool(
       const guestLabel = String(args.guestName ?? "").trim() || "Гость";
       const foreignNote = args.isForeigner ? " · иностранец" : "";
       const phoneNote = args.phone ? `\nТел: ${args.phone}` : "";
-      const placeLabel = bedLabel ?? room.number;
+      const placeLabel =
+        bedLabel && room.kind === "dorm"
+          ? formatDormPlaceLabel(room.number, bedLabel)
+          : bedLabel ?? room.number;
 
       const preview =
         `Новая бронь: ${guestLabel}${foreignNote}\n` +
