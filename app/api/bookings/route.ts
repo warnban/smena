@@ -142,7 +142,7 @@ export async function POST(req: NextRequest) {
       guestName: guest.name,
       checkIn: checkInDate,
       checkOut: checkOutDate,
-      source: sourceKey as "direct" | "booking" | "expedia" | "ostrovok" | "yandex",
+      source: sourceKey,
       channelId: channel?.id ?? null,
       status: "new",
       amount,

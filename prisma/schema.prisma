@@ -28,14 +28,6 @@ enum DormGender {
   mixed
 }
 
-enum BookingSource {
-  booking
-  expedia
-  direct
-  ostrovok
-  yandex
-}
-
 enum BookingStatus {
   new
   confirmed
@@ -158,6 +150,7 @@ model Seat {
   staff     Staff[]
   staffInvites StaffInvite[]
   paymentMethods PaymentMethodDef[]
+  bookingSources BookingSourceDef[]
   roomCategories RoomCategoryDef[]
   transactionCategories TransactionCategoryDef[]
   catalogItems   Service[]
@@ -514,7 +507,7 @@ model Booking {
   checkOut    DateTime
   checkInHour  Int          @default(14)
   checkOutHour Int          @default(12)
-  source      BookingSource @default(direct)
+  source      String        @default("direct")
   channel     Channel?      @relation(fields: [channelId], references: [id])
   channelId   String?
   status      BookingStatus @default(new)
@@ -566,6 +559,24 @@ model PaymentMethodDef {
   color     String   @default("#059669")
   bg        String   @default("#F0FDF4")
   icon      String   @default("Banknote")
+  sortOrder Int      @default(0)
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  @@unique([seatId, code])
+  @@index([seatId])
+}
+
+model BookingSourceDef {
+  id        String   @id @default(uuid())
+  seat      Seat     @relation(fields: [seatId], references: [id], onDelete: Cascade)
+  seatId    String
+  code      String
+  label     String
+  color     String   @default("#D97706")
+  bg        String   @default("#FEF3C7")
+  text      String   @default("#92400E")
+  border    String   @default("#FDE68A")
   sortOrder Int      @default(0)
   active    Boolean  @default(true)
   createdAt DateTime @default(now())

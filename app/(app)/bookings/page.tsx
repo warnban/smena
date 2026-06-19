@@ -8,12 +8,13 @@ import { BookingModal } from "@/components/modals/booking-modal";
 import { NewBookingModal } from "@/components/modals/new-booking-modal";
 import { useApp } from "@/components/providers/app-data";
 import { money, fmtDate, inits, dayDiff } from "@/lib/format";
-import { SOURCE, BOOKING_ST } from "@/lib/constants";
+import { BOOKING_ST } from "@/lib/constants";
+import { sourceStyle } from "@/lib/booking-sources";
 import type { Booking } from "@/lib/types";
 import { Select } from "@/components/ui/select";
 
 export default function BookingsPage() {
-  const { bookings, rooms, hotelId, loading, getCategoryLabel } = useApp();
+  const { bookings, rooms, hotelId, loading, getCategoryLabel, sourceConfig } = useApp();
   const [search, setSearch] = useState("");
   const [stF, setStF] = useState("all");
   const [srcF, setSrcF] = useState("all");
@@ -68,7 +69,7 @@ export default function BookingsPage() {
             onChange={setSrcF}
             options={[
               { value: "all", label: "Все источники" },
-              ...Object.entries(SOURCE).map(([k, v]) => ({ value: k, label: v.label })),
+              ...Object.entries(sourceConfig).map(([k, v]) => ({ value: k, label: v.label })),
             ]}
             className="w-auto"
           />
@@ -82,7 +83,7 @@ export default function BookingsPage() {
             <tbody>
               {filtered.map((b) => {
                 const room = rooms.find((r) => r.id === b.roomId);
-                const src = SOURCE[b.source];
+                const src = sourceStyle(sourceConfig, b.source);
                 const debt = b.amount - b.paid;
                 const nights = dayDiff(b.checkIn, b.checkOut);
                 return (

@@ -1,6 +1,6 @@
 export type RoomStatus = "available" | "occupied" | "checkin" | "checkout" | "cleaning" | "maintenance";
 export type RoomCategory = string;
-export type BookingSource = "booking" | "expedia" | "direct" | "ostrovok" | "yandex";
+export type BookingSource = string;
 export type BookingStatus = "new" | "confirmed" | "checkedin" | "checkedout" | "cancelled";
 export type TxType = "payment" | "refund" | "service" | "encashment" | "expense";
 export type CatalogKind = "service" | "expense";
@@ -241,6 +241,18 @@ export interface TransactionCategoryDef {
   code: string;
   label: string;
   sortOrder: number;
+}
+
+export interface BookingSourceDef {
+  id: string;
+  code: string;
+  label: string;
+  color: string;
+  bg: string;
+  text: string;
+  border: string;
+  sortOrder: number;
+  active: boolean;
 }
 
 export interface Transaction {

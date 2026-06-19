@@ -9,7 +9,8 @@ import { useApp } from "@/components/providers/app-data";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { Icon } from "@/components/icon";
 import { money, fmtDate, inits } from "@/lib/format";
-import { SOURCE, BOOKING_ST } from "@/lib/constants";
+import { BOOKING_ST } from "@/lib/constants";
+import { sourceStyle } from "@/lib/booking-sources";
 import type { Booking, BookingStatus } from "@/lib/types";
 import { CheckInModal } from "@/components/modals/check-in-modal";
 import { DatePicker } from "@/components/ui/date-picker";
@@ -32,7 +33,7 @@ export function BookingModal({
   initialTab?: "details" | "payment" | "history";
   openStayChange?: boolean;
 }) {
-  const { rooms, guests, bookings, transactions, pmConfig, refresh, getCategoryLabel } = useApp();
+  const { rooms, guests, bookings, transactions, pmConfig, refresh, getCategoryLabel, sourceConfig } = useApp();
   const live = useMemo(() => bookings.find((b) => b.id === booking.id) ?? booking, [bookings, booking]);
 
   const [tab, setTab] = useState<"details" | "payment" | "history">(initialTab);
@@ -44,7 +45,7 @@ export function BookingModal({
   const room = rooms.find((r) => r.id === live.roomId);
   const guest = guests.find((g) => g.id === live.guestId);
   const nights = mskNightDiff(live.checkIn, live.checkOut);
-  const src = SOURCE[live.source];
+  const src = sourceStyle(sourceConfig, live.source);
 
   const bookingPayments = useMemo(
     () => filterBookingTransactions(live.id, transactions),

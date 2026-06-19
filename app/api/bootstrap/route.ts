@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
 import { ensurePaymentMethods } from "@/lib/ensure-payment-methods";
+import { ensureBookingSources } from "@/lib/ensure-booking-sources";
 import { ensureRoomCategories } from "@/lib/ensure-room-categories";
 import { syncScheduledCleaning } from "@/lib/housekeeping";
 import { canWriteHotelOps } from "@/lib/permissions";
@@ -34,6 +35,7 @@ export async function GET() {
   const hotelFilter = { seatId, ...(hotelIds.length ? { id: { in: hotelIds } } : { id: "__none__" }) };
 
   const paymentMethods = await ensurePaymentMethods(seatId);
+  const bookingSources = await ensureBookingSources(seatId);
   const roomCategories = await ensureRoomCategories(seatId);
 
   if (hotelIds.length) {
@@ -138,6 +140,7 @@ export async function GET() {
     services,
     expenses,
     paymentMethods,
+    bookingSources,
     roomCategories,
     hkTasks,
     channels,

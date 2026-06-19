@@ -18,6 +18,7 @@ import {
   txTypeLabel,
 } from "@/lib/transaction-display";
 import { fmtMskDayLabel, mskDateKey } from "@/lib/msk-time";
+import { buildCategoryOptions } from "@/lib/transaction-categories";
 import type { Hotel, Transaction, TransactionCategoryDef } from "@/lib/types";
 
 const TX_PAGE_SIZE = 50;
@@ -25,6 +26,7 @@ const TX_PAGE_SIZE = 50;
 export type TxFilterState = {
   direction: "all" | "income" | "expense";
   method: string;
+  category: string;
   dateFrom: string;
   dateTo: string;
   query: string;
@@ -33,6 +35,7 @@ export type TxFilterState = {
 export const DEFAULT_TX_FILTER: TxFilterState = {
   direction: "all",
   method: "all",
+  category: "all",
   dateFrom: "",
   dateTo: "",
   query: "",
@@ -44,6 +47,7 @@ type TxListRow =
 
 function matchesFilter(t: Transaction, filter: TxFilterState): boolean {
   if (filter.method !== "all" && t.paymentMethod !== filter.method) return false;
+  if (filter.category !== "all" && t.category !== filter.category) return false;
   if (filter.direction === "income" && isExpenseType(t.type)) return false;
   if (filter.direction === "expense" && !isExpenseType(t.type)) return false;
   const key = mskDateKey(t.date);
@@ -61,6 +65,7 @@ function isFilterActive(filter: TxFilterState): boolean {
   return (
     filter.direction !== "all" ||
     filter.method !== "all" ||
+    filter.category !== "all" ||
     Boolean(filter.dateFrom) ||
     Boolean(filter.dateTo) ||
     Boolean(filter.query.trim())
@@ -76,6 +81,8 @@ export function TransactionsPanel({
   canManageSettings,
   onRefresh,
   presetMethod,
+  presetCategory,
+  presetDirection,
 }: {
   transactions: Transaction[];
   hotels: Hotel[];
@@ -85,6 +92,8 @@ export function TransactionsPanel({
   canManageSettings: boolean;
   onRefresh: () => Promise<void>;
   presetMethod?: string | null;
+  presetCategory?: string | null;
+  presetDirection?: "income" | "expense" | null;
 }) {
   const [filter, setFilter] = useState<TxFilterState>(DEFAULT_TX_FILTER);
   const [txPage, setTxPage] = useState(1);
@@ -107,6 +116,17 @@ export function TransactionsPanel({
     [pmConfig]
   );
 
+  const categoryOptions = useMemo(
+    () => [
+      { value: "all", label: "Все категории" },
+      ...buildCategoryOptions(transactionCategories).map((c) => ({
+        value: c.code,
+        label: c.label,
+      })),
+    ],
+    [transactionCategories]
+  );
+
   useEffect(() => {
     if (presetMethod) {
       setFilter((f) => ({ ...f, method: presetMethod }));
@@ -115,8 +135,19 @@ export function TransactionsPanel({
   }, [presetMethod]);
 
   useEffect(() => {
+    if (presetCategory || presetDirection) {
+      setFilter((f) => ({
+        ...f,
+        ...(presetCategory ? { category: presetCategory } : {}),
+        ...(presetDirection ? { direction: presetDirection } : {}),
+      }));
+      setTxPage(1);
+    }
+  }, [presetCategory, presetDirection]);
+
+  useEffect(() => {
     setTxPage(1);
-  }, [filter.direction, filter.method, filter.dateFrom, filter.dateTo, filter.query, hotelId]);
+  }, [filter.direction, filter.method, filter.category, filter.dateFrom, filter.dateTo, filter.query, hotelId]);
 
   const filtTxns = useMemo(
     () =>
@@ -313,12 +344,18 @@ export function TransactionsPanel({
             )}
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
             <Select
               size="sm"
               value={filter.method}
               onChange={(v) => setFilter((f) => ({ ...f, method: v }))}
               options={pmMethodOptions}
+            />
+            <Select
+              size="sm"
+              value={filter.category}
+              onChange={(v) => setFilter((f) => ({ ...f, category: v }))}
+              options={categoryOptions}
             />
             <DatePicker
               mode="iso"

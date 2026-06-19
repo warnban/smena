@@ -14,7 +14,12 @@ import { apiErrorMessage } from "@/lib/api-error";
 import { assertPaymentsOpen } from "@/lib/payment-lock";
 import { buildAccommodationPaymentNote } from "@/lib/booking-transaction-notes";
 import { formatRuleLabel, hotelHasDiscountRules, validatePaymentDiscount } from "@/lib/hotel-discount-rules";
-import { mskNightDiff } from "@/lib/msk-time";
+import {
+  bookingStayNights,
+  firstUnpaidNightDateKey,
+  nightsFromFirstUnpaidToPaidThrough,
+} from "@/lib/booking-payment-due";
+import { mskAddDays, mskDateKey, mskNightDiff } from "@/lib/msk-time";
 import { setBedStatus } from "@/lib/dorm.server";
 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
@@ -44,6 +49,8 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     paymentMethod?: string;
     paymentAmount?: number;
     paymentNights?: number;
+    paidThroughDate?: string;
+    note?: string;
     discountPercent?: number;
     discountPerNight?: number;
     discountRuleId?: string;
@@ -71,8 +78,46 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   const discountPerNight = Math.max(0, Math.round(Number(body.discountPerNight) || 0));
   const paymentMethod = String(body.paymentMethod ?? "cash");
   const paymentAmount = Math.round(Number(body.paymentAmount) || 0);
-  const stayNights = mskNightDiff(booking.checkIn, booking.checkOut);
-  const paymentNights = Math.max(1, Math.min(stayNights, Math.round(Number(body.paymentNights) || stayNights)));
+  const stayNights = bookingStayNights(booking);
+
+  const [existingTx] = await Promise.all([
+    prisma.transaction.findMany({
+      where: { bookingId: booking.id, category: "accommodation", cancelledAt: null },
+    }),
+  ]);
+
+  const pricingBooking = {
+    ...booking,
+    amount: calcStayAmount({
+      roomPrice: booking.room.price,
+      checkIn: booking.checkIn,
+      checkOut: booking.checkOut,
+      discountPercent: useRules ? booking.discountPercent ?? 0 : discountPercent,
+      discountPerNight: useRules ? booking.discountPerNight ?? 0 : discountPerNight,
+    }),
+  };
+
+  const firstUnpaidKey = firstUnpaidNightDateKey(pricingBooking, undefined, existingTx);
+  const checkOutKey = mskDateKey(booking.checkOut);
+
+  let paymentNights = Math.max(1, Math.round(Number(body.paymentNights) || stayNights));
+  const paidThroughRaw = body.paidThroughDate ? String(body.paidThroughDate).slice(0, 10) : "";
+
+  if (paidThroughRaw) {
+    if (paidThroughRaw < firstUnpaidKey || paidThroughRaw > checkOutKey) {
+      return NextResponse.json({ error: "Некорректная дата «оплачено до»" }, { status: 400 });
+    }
+    paymentNights = nightsFromFirstUnpaidToPaidThrough(firstUnpaidKey, paidThroughRaw);
+  }
+
+  if (paymentNights < 1) {
+    return NextResponse.json({ error: "Укажите период оплаты" }, { status: 400 });
+  }
+
+  const maxPayNights = Math.max(1, mskNightDiff(firstUnpaidKey, checkOutKey));
+  if (paymentNights > maxPayNights) {
+    return NextResponse.json({ error: "Слишком много ночей для оплаты" }, { status: 400 });
+  }
 
   const finalAmount = calcStayAmount({
     roomPrice: booking.room.price,
@@ -152,12 +197,21 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     channelId = channel.id;
   }
 
+  const paidThroughDate = paidThroughRaw || mskAddDays(firstUnpaidKey, paymentNights - 1);
+
   const appliedRule = appliedRuleId ? discountRules.find((r) => r.id === appliedRuleId) : null;
   const noteDiscount = appliedRule
     ? `Скидка: ${formatRuleLabel(appliedRule)}`
     : !useRules && (appliedPct || appliedPerNight)
       ? "Заселение со скидкой"
       : null;
+
+  const bookingForNote = {
+    ...booking,
+    amount: finalAmount,
+    discountPercent: useRules ? booking.discountPercent ?? 0 : appliedPct,
+    discountPerNight: useRules ? booking.discountPerNight ?? 0 : appliedPerNight,
+  };
 
   const ops: Prisma.PrismaPromise<unknown>[] = [
     prisma.guest.update({
@@ -206,14 +260,11 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
           discountRuleId: appliedRuleId,
           discountPercentApplied: appliedPct,
           discountPerNightApplied: appliedPerNight,
-          note: buildAccommodationPaymentNote(
-            { checkIn: booking.checkIn, checkOut: booking.checkOut, amount: finalAmount, paid: booking.paid },
-            payNow,
-            {
-              paidBefore: booking.paid,
-              extra: noteDiscount,
-            }
-          ),
+          note: buildAccommodationPaymentNote(bookingForNote, payNow, {
+            paidBefore: booking.paid,
+            extra: [`Оплачено до ${paidThroughDate} 12:00`, noteDiscount].filter(Boolean).join(". "),
+            userNote: body.note ?? null,
+          }),
           ...(channelId ? { channelId } : {}),
         },
       })

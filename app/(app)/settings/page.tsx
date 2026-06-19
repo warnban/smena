@@ -44,7 +44,7 @@ function Modal({ title, onClose, children }: { title: string; onClose: () => voi
 }
 
 export default function SettingsPage() {
-  const { hotels, staff, session, loading, canManageSettings, refresh, paymentMethods, services, expenses, roomCategories } = useApp();
+  const { hotels, staff, session, loading, canManageSettings, refresh, paymentMethods, bookingSources, services, expenses, roomCategories } = useApp();
   const [sTab, setSTab] = useState<"hotel" | "staff" | "finance" | "system">("hotel");
   const [selHotel, setSelHotel] = useState<Hotel | null>(null);
   const [invites, setInvites] = useState<PendingInvite[]>([]);
@@ -219,6 +219,7 @@ export default function SettingsPage() {
             canEdit={canManageSettings}
             hotels={hotels}
             paymentMethods={paymentMethods}
+            bookingSources={bookingSources}
             services={services}
             expenses={expenses}
             onRefresh={refresh}
@@ -370,6 +371,7 @@ function FinanceSettings({
   canEdit,
   hotels,
   paymentMethods,
+  bookingSources,
   services,
   expenses,
   onRefresh,
@@ -377,6 +379,7 @@ function FinanceSettings({
   canEdit: boolean;
   hotels: Hotel[];
   paymentMethods: import("@/lib/types").PaymentMethodDef[];
+  bookingSources: import("@/lib/types").BookingSourceDef[];
   services: import("@/lib/types").ServiceItem[];
   expenses: import("@/lib/types").ServiceItem[];
   onRefresh: () => Promise<void>;
@@ -384,6 +387,11 @@ function FinanceSettings({
   const [newPmLabel, setNewPmLabel] = useState("");
   const [newPmCode, setNewPmCode] = useState("");
   const [newPmColor, setNewPmColor] = useState(PM_COLOR_PRESETS[0].color);
+  const [newSourceLabel, setNewSourceLabel] = useState("");
+  const [newSourceCode, setNewSourceCode] = useState("");
+  const [newSourceColor, setNewSourceColor] = useState(PM_COLOR_PRESETS[2].color);
+  const [editSourceId, setEditSourceId] = useState<string | null>(null);
+  const [editSourceLabel, setEditSourceLabel] = useState("");
   const [newItemName, setNewItemName] = useState("");
   const [newItemPrice, setNewItemPrice] = useState("");
   const [newItemKind, setNewItemKind] = useState<"service" | "expense">("service");
@@ -412,6 +420,45 @@ function FinanceSettings({
     if (!confirm("Деактивировать способ оплаты?")) return;
     await fetch(`/api/payment-methods/${id}`, { method: "DELETE" });
     await onRefresh();
+  }
+
+  async function addBookingSource() {
+    if (!newSourceLabel.trim()) return;
+    setBusy(true);
+    await fetch("/api/booking-sources", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        label: newSourceLabel.trim(),
+        code: newSourceCode.trim() || newSourceLabel.trim().toLowerCase().replace(/\s+/g, "_"),
+        color: newSourceColor,
+        bg: colorToBg(newSourceColor),
+      }),
+    });
+    setNewSourceLabel("");
+    setNewSourceCode("");
+    await onRefresh();
+    setBusy(false);
+  }
+
+  async function removeBookingSource(id: string) {
+    if (!confirm("Удалить источник бронирования?")) return;
+    await fetch(`/api/booking-sources/${id}`, { method: "DELETE" });
+    await onRefresh();
+  }
+
+  async function saveBookingSourceEdit(id: string) {
+    if (!editSourceLabel.trim()) return;
+    setBusy(true);
+    await fetch(`/api/booking-sources/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ label: editSourceLabel.trim() }),
+    });
+    setEditSourceId(null);
+    setEditSourceLabel("");
+    await onRefresh();
+    setBusy(false);
   }
 
   async function addCatalogItem() {
@@ -490,6 +537,81 @@ function FinanceSettings({
               </div>
             </div>
             <button onClick={addPaymentMethod} disabled={busy} className="w-full py-2 text-white text-[12px] font-bold rounded-xl bg-primary hover:opacity-90 disabled:opacity-50">Добавить способ оплаты</button>
+          </div>
+        )}
+      </div>
+
+      <div className="bg-card rounded-xl p-5 border border-border space-y-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="text-[14px] font-bold text-foreground">Источники бронирования</h3>
+            <p className="text-[11px] text-muted-foreground">Используются при создании брони и в аналитике</p>
+          </div>
+          {!canEdit && <span className="text-[11px] text-muted-foreground">Только просмотр</span>}
+        </div>
+        <div className="space-y-2">
+          {bookingSources.filter((s) => s.active).map((s) => (
+            <div key={s.id} className="flex items-center justify-between px-3 py-2.5 rounded-xl border border-border bg-muted/40 gap-2">
+              <div className="flex items-center gap-2 min-w-0 flex-1">
+                <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ background: s.color }} />
+                {editSourceId === s.id ? (
+                  <input
+                    value={editSourceLabel}
+                    onChange={(e) => setEditSourceLabel(e.target.value)}
+                    className="flex-1 px-2 py-1 text-[12px] rounded-lg border border-border bg-card outline-none"
+                    autoFocus
+                  />
+                ) : (
+                  <>
+                    <span className="text-[13px] font-semibold text-foreground truncate">{s.label}</span>
+                    <span className="text-[10px] text-muted-foreground font-mono flex-shrink-0">{s.code}</span>
+                  </>
+                )}
+              </div>
+              {canEdit && (
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  {editSourceId === s.id ? (
+                    <>
+                      <button onClick={() => saveBookingSourceEdit(s.id)} disabled={busy} className="text-[11px] font-bold text-primary hover:underline">Сохранить</button>
+                      <button onClick={() => { setEditSourceId(null); setEditSourceLabel(""); }} className="text-[11px] font-bold text-muted-foreground hover:underline">Отмена</button>
+                    </>
+                  ) : (
+                    <>
+                      <button onClick={() => { setEditSourceId(s.id); setEditSourceLabel(s.label); }} className="text-[11px] font-bold text-primary hover:underline">Изменить</button>
+                      <button onClick={() => removeBookingSource(s.id)} className="text-[11px] font-bold text-destructive hover:underline">Удалить</button>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+        {canEdit && (
+          <div className="space-y-3 pt-2">
+            <div className="flex gap-2">
+              <input value={newSourceLabel} onChange={(e) => setNewSourceLabel(e.target.value)} placeholder="Название (напр. Avito)" className="flex-1 px-3 py-2 text-[12px] rounded-xl border border-border bg-muted outline-none" />
+              <input value={newSourceCode} onChange={(e) => setNewSourceCode(e.target.value)} placeholder="Код (необяз.)" className="w-32 px-3 py-2 text-[12px] rounded-xl border border-border bg-muted outline-none" />
+            </div>
+            <div>
+              <label className="text-[10px] font-bold text-muted-foreground block mb-1.5">Цвет на шахматке</label>
+              <div className="flex flex-wrap gap-2 items-center">
+                {PM_COLOR_PRESETS.map((p) => (
+                  <button
+                    key={p.color}
+                    type="button"
+                    title={p.label}
+                    onClick={() => setNewSourceColor(p.color)}
+                    className="w-8 h-8 rounded-lg border-2 transition-transform hover:scale-105"
+                    style={{
+                      background: p.color,
+                      borderColor: newSourceColor === p.color ? "#0F172A" : "transparent",
+                      boxShadow: newSourceColor === p.color ? "0 0 0 2px white inset" : undefined,
+                    }}
+                  />
+                ))}
+              </div>
+            </div>
+            <button onClick={addBookingSource} disabled={busy} className="w-full py-2 text-white text-[12px] font-bold rounded-xl bg-primary hover:opacity-90 disabled:opacity-50">Добавить источник</button>
           </div>
         )}
       </div>

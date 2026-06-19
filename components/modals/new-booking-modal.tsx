@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { X, Globe, AlertTriangle } from "lucide-react";
 import { useApp } from "@/components/providers/app-data";
 import { money, dayDiff } from "@/lib/format";
-import { DORM_GENDER_LABELS, SOURCE } from "@/lib/constants";
+import { DORM_GENDER_LABELS } from "@/lib/constants";
 import { formatBookingPlaceOptionLabel, guestGenderMatchesDorm } from "@/lib/dorm";
 import { DatePicker } from "@/components/ui/date-picker";
 import { PhoneInput, getPhoneError } from "@/components/ui/phone-input";
@@ -32,7 +32,7 @@ type AvailSlot = {
 };
 
 export function NewBookingModal({ onClose, onCreated }: Props) {
-  const { hotels, rooms, guests, hotelId, refresh, getCategoryLabel } = useApp();
+  const { hotels, rooms, guests, hotelId, refresh, getCategoryLabel, sourceConfig } = useApp();
 
   const activeHotel = hotelId !== "all" ? hotels.find((h) => h.id === hotelId) : null;
   const activeHotelId = activeHotel?.id ?? "";
@@ -49,7 +49,9 @@ export function NewBookingModal({ onClose, onCreated }: Props) {
     d.setDate(d.getDate() + 2);
     return d.toISOString().slice(0, 10);
   });
-  const [source, setSource] = useState<BookingSource>("direct");
+  const [source, setSource] = useState<BookingSource>(
+    () => (sourceConfig.direct ? "direct" : Object.keys(sourceConfig)[0] ?? "direct")
+  );
   const [guestsCount, setGuestsCount] = useState(1);
   const [notes, setNotes] = useState("");
   const [busy, setBusy] = useState(false);
@@ -384,7 +386,7 @@ export function NewBookingModal({ onClose, onCreated }: Props) {
               <Select
                 value={source}
                 onChange={(v) => setSource(v as BookingSource)}
-                options={Object.entries(SOURCE).map(([k, v]) => ({ value: k, label: v.label }))}
+                options={Object.entries(sourceConfig).map(([k, v]) => ({ value: k, label: v.label }))}
               />
             </div>
             <div>

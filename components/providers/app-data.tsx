@@ -1,11 +1,13 @@
 "use client";
 
 import { createContext, useContext, useCallback, useEffect, useMemo, useState } from "react";
-import type { Hotel, StaffMember, Room, Bed, Guest, Booking, Transaction, ServiceItem, HkTask, Channel, PaymentMethodDef, RoomCategoryDef, Organization, OrganizationStay, HotelDiscountRule, TransactionCategoryDef } from "@/lib/types";
+import type { Hotel, StaffMember, Room, Bed, Guest, Booking, Transaction, ServiceItem, HkTask, Channel, PaymentMethodDef, RoomCategoryDef, Organization, OrganizationStay, HotelDiscountRule, TransactionCategoryDef, BookingSourceDef } from "@/lib/types";
 import { buildPmConfig } from "@/lib/payment-methods";
+import { buildSourceConfig } from "@/lib/booking-sources";
 import { categoryLabel } from "@/lib/room-categories";
 import { fileServeUrl } from "@/lib/file-url";
 import { PM_CONFIG as LEGACY_PM } from "@/lib/constants";
+import { SOURCE as LEGACY_SOURCE } from "@/lib/constants";
 
 interface SessionInfo {
   userId: string;
@@ -28,6 +30,8 @@ interface AppData {
   services: ServiceItem[];
   expenses: ServiceItem[];
   paymentMethods: PaymentMethodDef[];
+  bookingSources: BookingSourceDef[];
+  sourceConfig: Record<string, { bg: string; text: string; border: string; solid: string; label: string }>;
   roomCategories: RoomCategoryDef[];
   getCategoryLabel: (code: string) => string;
   pmConfig: Record<string, { label: string; color: string; bg: string; icon: string }>;
@@ -71,6 +75,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
   const [services, setServices] = useState<ServiceItem[]>([]);
   const [expenses, setExpenses] = useState<ServiceItem[]>([]);
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethodDef[]>([]);
+  const [bookingSources, setBookingSources] = useState<BookingSourceDef[]>([]);
   const [roomCategories, setRoomCategories] = useState<RoomCategoryDef[]>([]);
   const [hkTasks, setHkTasks] = useState<HkTask[]>([]);
   const [channels, setChannels] = useState<Channel[]>([]);
@@ -88,6 +93,11 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
     if (paymentMethods.length) return buildPmConfig(paymentMethods);
     return LEGACY_PM;
   }, [paymentMethods]);
+
+  const sourceConfig = useMemo(() => {
+    if (bookingSources.length) return buildSourceConfig(bookingSources);
+    return LEGACY_SOURCE;
+  }, [bookingSources]);
 
   const getCategoryLabel = useCallback(
     (code: string) => categoryLabel(roomCategories, code),
@@ -148,6 +158,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
     setServices((data.services as ServiceItem[]) ?? []);
     setExpenses((data.expenses as ServiceItem[]) ?? []);
     setPaymentMethods((data.paymentMethods as PaymentMethodDef[]) ?? []);
+    setBookingSources((data.bookingSources as BookingSourceDef[]) ?? []);
     setRoomCategories((data.roomCategories as RoomCategoryDef[]) ?? []);
     setHkTasks((data.hkTasks as HkTask[]) ?? []);
     setChannels((data.channels as Channel[]) ?? []);
@@ -235,10 +246,10 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
   const value: AppData = useMemo(
     () => ({
       seat, session, hotels, staff, rooms, beds, guests, organizations, organizationStays, bookings, transactions,
-      services, expenses, paymentMethods, roomCategories, getCategoryLabel, pmConfig, hkTasks, channels, hotelDiscountRules, transactionCategories,
+      services, expenses, paymentMethods, bookingSources, sourceConfig, roomCategories, getCategoryLabel, pmConfig, hkTasks, channels, hotelDiscountRules, transactionCategories,
       loading, loadError, hotelId, setHotelId, currentUser, canViewAllHotels, canManageSettings, canWriteHotelOps, refresh, refreshSilent,
     }),
-    [seat, session, hotels, staff, rooms, beds, guests, organizations, organizationStays, bookings, transactions, services, expenses, paymentMethods, roomCategories, getCategoryLabel, pmConfig, hkTasks, channels, hotelDiscountRules, transactionCategories, loading, loadError, hotelId, setHotelId, currentUser, canViewAllHotels, canManageSettings, canWriteHotelOps, refresh, refreshSilent]
+    [seat, session, hotels, staff, rooms, beds, guests, organizations, organizationStays, bookings, transactions, services, expenses, paymentMethods, bookingSources, sourceConfig, roomCategories, getCategoryLabel, pmConfig, hkTasks, channels, hotelDiscountRules, transactionCategories, loading, loadError, hotelId, setHotelId, currentUser, canViewAllHotels, canManageSettings, canWriteHotelOps, refresh, refreshSilent]
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

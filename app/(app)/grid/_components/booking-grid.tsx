@@ -8,8 +8,9 @@ import { TopBar } from "@/components/shell/topbar";
 import { useApp } from "@/components/providers/app-data";
 import { BookingModal } from "@/components/modals/booking-modal";
 import { fmtDate, dayDiff } from "@/lib/format";
-import { SOURCE, ROOM_STATUS } from "@/lib/constants";
-import type { Booking, BookingSource } from "@/lib/types";
+import { ROOM_STATUS } from "@/lib/constants";
+import { sourceStyle } from "@/lib/booking-sources";
+import type { Booking } from "@/lib/types";
 import { activeCategoryCodes } from "@/lib/room-categories";
 import { Select } from "@/components/ui/select";
 
@@ -24,7 +25,7 @@ const STD_CHECKIN_H = 14;
 const STD_CHECKOUT_H = 12;
 
 export function BookingGridView() {
-  const { bookings, rooms, hotelId, loading, roomCategories, getCategoryLabel } = useApp();
+  const { bookings, rooms, hotelId, loading, roomCategories, getCategoryLabel, sourceConfig } = useApp();
   const TODAY = useMemo(() => new Date(), []);
   const G_ANCHOR = useMemo(() => {
     const a = new Date(TODAY);
@@ -200,7 +201,7 @@ export function BookingGridView() {
             className="w-auto"
           />
           <div className="ml-auto flex items-center gap-3">
-            {(Object.entries(SOURCE) as [BookingSource, (typeof SOURCE)[string]][]).map(([k, s]) => (
+            {Object.entries(sourceConfig).map(([k, s]) => (
               <div key={k} className="flex items-center gap-1 text-[10px] text-muted-foreground">
                 <div className="w-3 h-2.5 rounded-sm" style={{ background: s.solid }} /> {s.label}
               </div>
@@ -311,7 +312,7 @@ export function BookingGridView() {
                             {rbs.map((bk) => {
                               const pos = barPos(bk);
                               if (!pos) return null;
-                              const src = SOURCE[bk.source];
+                              const src = sourceStyle(sourceConfig, bk.source);
                               return (
                                 <button
                                   key={bk.id}

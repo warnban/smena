@@ -11,22 +11,24 @@ import { KpiCard } from "@/components/ui/kpi-card";
 import { Icon } from "@/components/icon";
 import { useApp } from "@/components/providers/app-data";
 import { money } from "@/lib/format";
-import { SOURCE } from "@/lib/constants";
 import { buildMonthlyReport, calcKpis } from "@/lib/reporting";
 import { calcPaymentBalances } from "@/lib/finance";
 import { SalariesPanel } from "@/components/reports/salaries-panel";
 import { DailyReportPanel } from "@/components/reports/daily-report-panel";
 import { ShiftHandoverPanel } from "@/components/reports/shift-handover-panel";
 import { MonthComparisonPanel } from "@/components/reports/month-comparison-panel";
+import { CategoryBreakdownPanel } from "@/components/reports/category-breakdown-panel";
 import { TransactionsPanel } from "@/components/reports/transactions-panel";
 import { MetersPanel } from "@/components/reports/meters-panel";
 
 export default function ReportsPage() {
-  const { transactions, hotelId, bookings, rooms, hotels, pmConfig, transactionCategories, refresh, loading, canManageSettings } = useApp();
+  const { transactions, hotelId, bookings, rooms, hotels, pmConfig, transactionCategories, sourceConfig, refresh, loading, canManageSettings } = useApp();
   const [tab, setTab] = useState<"analytics" | "finance" | "shift" | "daily" | "salaries" | "transactions" | "meters">("analytics");
   const [analyticsView, setAnalyticsView] = useState<"overview" | "comparison">("overview");
   const [pmVis, setPmVis] = useState<Record<string, boolean>>({});
   const [txPresetMethod, setTxPresetMethod] = useState<string | null>(null);
+  const [txPresetCategory, setTxPresetCategory] = useState<string | null>(null);
+  const [txPresetDirection, setTxPresetDirection] = useState<"income" | "expense" | null>(null);
   const [encModal, setEncModal] = useState<string | null>(null);
   const [encAmount, setEncAmount] = useState("");
 
@@ -36,10 +38,23 @@ export default function ReportsPage() {
   function openTransactionsByMethod(method: string) {
     setTab("transactions");
     setTxPresetMethod(method);
+    setTxPresetCategory(null);
+    setTxPresetDirection(null);
+  }
+
+  function openTransactionsByCategory(direction: "income" | "expense", category: string) {
+    setTab("transactions");
+    setTxPresetCategory(category);
+    setTxPresetDirection(direction);
+    setTxPresetMethod(null);
   }
 
   useEffect(() => {
-    if (tab !== "transactions") setTxPresetMethod(null);
+    if (tab !== "transactions") {
+      setTxPresetMethod(null);
+      setTxPresetCategory(null);
+      setTxPresetDirection(null);
+    }
   }, [tab]);
 
   const pmEntries = Object.entries(pmConfig);
@@ -87,8 +102,8 @@ export default function ReportsPage() {
     const totals: Record<string, number> = {};
     const scoped = hotelId === "all" ? bookings : bookings.filter((b) => b.hotelId === hotelId);
     scoped.forEach((b) => { totals[b.source] = (totals[b.source] || 0) + b.amount; });
-    return Object.entries(totals).map(([k, v]) => ({ name: SOURCE[k]?.label ?? k, color: SOURCE[k]?.solid ?? "#3B82F6", v }));
-  }, [bookings, hotelId]);
+    return Object.entries(totals).map(([k, v]) => ({ name: sourceConfig[k]?.label ?? k, color: sourceConfig[k]?.solid ?? "#3B82F6", v }));
+  }, [bookings, hotelId, sourceConfig]);
 
   async function submitEncashment() {
     if (!encModal) return;
@@ -190,6 +205,12 @@ export default function ReportsPage() {
                 <div className="space-y-1.5 mt-2">{revChannelData.map((r, i) => <div key={i} className="flex items-center justify-between text-[11px]"><div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-sm" style={{ background: r.color }} /><span className="text-muted-foreground">{r.name}</span></div><span className="font-black text-foreground">{(r.v / 1000).toFixed(0)}k ₽</span></div>)}</div>
               </div>
             </div>
+            <CategoryBreakdownPanel
+              transactions={htxns}
+              bookings={scopedBookings}
+              transactionCategories={transactionCategories}
+              onCategoryClick={openTransactionsByCategory}
+            />
               </>
             )}
           </>
@@ -295,6 +316,8 @@ export default function ReportsPage() {
             canManageSettings={canManageSettings}
             onRefresh={refresh}
             presetMethod={txPresetMethod}
+            presetCategory={txPresetCategory}
+            presetDirection={txPresetDirection}
           />
         )}
 
