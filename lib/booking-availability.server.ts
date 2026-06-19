@@ -152,7 +152,8 @@ export async function findAvailableRooms(params: {
 
   for (const room of rooms) {
     if (room.kind === "dorm") {
-      if (!guestGenderMatchesDorm(params.guestGender, room.dormGender)) continue;
+      const genderKnown = params.guestGender === "M" || params.guestGender === "F";
+      if (genderKnown && !guestGenderMatchesDorm(params.guestGender, room.dormGender)) continue;
 
       for (const bed of room.beds) {
         if (bed.status === "maintenance") continue;
@@ -207,7 +208,7 @@ export async function findAvailableRooms(params: {
   }
 
   return {
-    rooms: slots.slice(0, params.limit ?? 20),
+    rooms: params.limit != null ? slots.slice(0, params.limit) : slots,
     nights,
     checkIn,
     checkOut,

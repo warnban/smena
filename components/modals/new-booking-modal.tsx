@@ -333,7 +333,7 @@ export function NewBookingModal({ onClose, onCreated }: Props) {
                 value={placeId}
                 onChange={setPlaceId}
                 disabled={!activeHotel || availLoading}
-                placeholder="Выберите номер"
+                placeholder="Выберите номер или койко-место"
                 options={placeOptions}
               />
             )}
