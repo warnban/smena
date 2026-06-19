@@ -9,6 +9,10 @@ import {
   recalcOrganizationStayAmount,
   shouldOccupyRoom,
 } from "@/lib/organization-stay";
+import {
+  occupyOrganizationRoom,
+  syncOrganizationDormRooms,
+} from "@/lib/organization-stay-occupancy.server";
 
 type RoomInput = { roomId: string; checkIn?: string; checkOut?: string };
 
@@ -48,6 +52,8 @@ export async function POST(req: NextRequest) {
       if (!avail.ok) return NextResponse.json({ error: avail.error }, { status: 400 });
     }
 
+    const dormRoomIds: string[] = [];
+
     const stay = await prisma.$transaction(async (tx) => {
       const created = await tx.organizationStay.create({
         data: {
@@ -81,12 +87,17 @@ export async function POST(req: NextRequest) {
         });
 
         if (shouldOccupyRoom(riIn)) {
-          await tx.room.update({ where: { id: room.id }, data: { status: "occupied" } });
+          const isDorm = await occupyOrganizationRoom(room.id, tx);
+          if (isDorm) dormRoomIds.push(room.id);
         }
       }
 
       return created;
     });
+
+    if (dormRoomIds.length) {
+      await syncOrganizationDormRooms(dormRoomIds);
+    }
 
     await recalcOrganizationStayAmount(stay.id);
 

@@ -3,8 +3,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { X, Search, RotateCcw, Check } from "lucide-react";
 import { Icon } from "@/components/icon";
+import { OperationDateField } from "@/components/ui/operation-date-field";
 import { useApp } from "@/components/providers/app-data";
 import { money, fmtDate } from "@/lib/format";
+import { mskDateKey } from "@/lib/msk-time";
 
 type RefundCandidate = {
   id: string;
@@ -32,7 +34,7 @@ type RefundQuote = {
 };
 
 export function RefundModal({ onClose }: { onClose: () => void }) {
-  const { hotelId, hotels, pmConfig, refresh } = useApp();
+  const { hotelId, hotels, pmConfig, refresh, canManageSettings } = useApp();
   const searchHotelId = hotelId || "all";
   const showHotelInResults = hotelId === "all";
 
@@ -43,6 +45,7 @@ export function RefundModal({ onClose }: { onClose: () => void }) {
   const [withholdNights, setWithholdNights] = useState(0);
   const [method, setMethod] = useState("cash");
   const [note, setNote] = useState("");
+  const [operationDate, setOperationDate] = useState(() => mskDateKey());
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -142,6 +145,7 @@ export function RefundModal({ onClose }: { onClose: () => void }) {
           withholdNights,
           paymentMethod: method,
           note,
+          operationDate: canManageSettings ? operationDate : undefined,
         }),
       });
       const data = await res.json();
@@ -347,6 +351,12 @@ export function RefundModal({ onClose }: { onClose: () => void }) {
                   className="w-full px-3 py-2 text-[12px] rounded-xl border border-border bg-muted outline-none"
                 />
               </div>
+
+              <OperationDateField
+                enabled={canManageSettings}
+                value={operationDate}
+                onChange={setOperationDate}
+              />
             </>
           )}
 

@@ -122,12 +122,13 @@ export async function findAvailableRooms(params: {
         room: { hotelId: params.hotelId },
         organizationStay: { status: "active" },
       },
-      select: { roomId: true, checkIn: true, checkOut: true },
+      select: { roomId: true, checkIn: true, checkOut: true, room: { select: { kind: true } } },
     }),
   ]);
 
   const blockedPrivateRooms = new Set<string>();
   const blockedBeds = new Set<string>();
+  const blockedDormRooms = new Set<string>();
 
   for (const b of bookings) {
     const inKey = b.checkIn.toISOString().slice(0, 10);
@@ -144,7 +145,11 @@ export async function findAvailableRooms(params: {
     const inKey = r.checkIn.toISOString().slice(0, 10);
     const outKey = r.checkOut.toISOString().slice(0, 10);
     if (dateRangesOverlap(checkIn, checkOut, inKey, outKey)) {
-      blockedPrivateRooms.add(r.roomId);
+      if (r.room.kind === "dorm") {
+        blockedDormRooms.add(r.roomId);
+      } else {
+        blockedPrivateRooms.add(r.roomId);
+      }
     }
   }
 
@@ -158,6 +163,7 @@ export async function findAvailableRooms(params: {
       for (const bed of room.beds) {
         if (bed.status === "maintenance") continue;
         if (blockedBeds.has(bed.id)) continue;
+        if (blockedDormRooms.has(room.id)) continue;
 
         slots.push({
           id: bed.id,

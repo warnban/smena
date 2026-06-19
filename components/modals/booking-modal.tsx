@@ -109,6 +109,7 @@ export function BookingModal({
     discountPercent: number;
     discountPerNight: number;
     discountRuleId?: string;
+    operationDate?: string;
   }) {
     return call(`/api/bookings/${live.id}/payment`, payload);
   }

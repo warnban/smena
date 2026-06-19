@@ -8,6 +8,7 @@ import {
   directionFromTxType,
   manualTxTypeFromDirection,
 } from "@/lib/transaction-manual.server";
+import { resolveTransactionDateInput } from "@/lib/transaction-date.server";
 import { apiErrorMessage } from "@/lib/api-error";
 
 type RouteParams = { params: Promise<{ id: string }> | { id: string } };
@@ -30,7 +31,7 @@ export async function GET(_req: NextRequest, context: RouteParams) {
     });
     if (!tx) return NextResponse.json({ error: "Транзакция не найдена" }, { status: 404 });
 
-    const editable = await canEditTransaction(tx);
+    const editable = await canEditTransaction(tx, session.role);
 
     return NextResponse.json({
       transaction: tx,
@@ -60,7 +61,7 @@ export async function PATCH(req: NextRequest, context: RouteParams) {
     const auth = await assertCanManageHotel(session, tx.hotelId);
     if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status });
 
-    const editable = await canEditTransaction(tx);
+    const editable = await canEditTransaction(tx, session.role);
     if (!editable.ok) {
       return NextResponse.json({ error: editable.reason }, { status: 403 });
     }
@@ -92,6 +93,15 @@ export async function PATCH(req: NextRequest, context: RouteParams) {
     const preservedType =
       tx.type === "service" ? "service" : tx.type === "encashment" ? "encashment" : newType;
 
+    let txDate = tx.date;
+    if (body.date != null || body.operationDate != null) {
+      const dateResolved = resolveTransactionDateInput(session.role, body.date ?? body.operationDate);
+      if (!dateResolved.ok) {
+        return NextResponse.json({ error: dateResolved.error }, { status: dateResolved.status });
+      }
+      txDate = dateResolved.date;
+    }
+
     const updated = await prisma.transaction.update({
       where: { id: tx.id },
       data: {
@@ -99,6 +109,7 @@ export async function PATCH(req: NextRequest, context: RouteParams) {
         paymentMethod,
         guestName: guestName || null,
         type: preservedType,
+        date: txDate,
       },
     });
 

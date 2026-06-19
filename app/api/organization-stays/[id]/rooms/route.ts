@@ -9,6 +9,10 @@ import {
   recalcOrganizationStayAmount,
   shouldOccupyRoom,
 } from "@/lib/organization-stay";
+import {
+  occupyOrganizationRoom,
+  syncOrganizationDormRooms,
+} from "@/lib/organization-stay-occupancy.server";
 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
   try {
@@ -45,6 +49,8 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     const room = await prisma.room.findFirst({ where: { id: roomId, hotelId: stay.hotelId } });
     if (!room) return NextResponse.json({ error: "Номер не найден" }, { status: 404 });
 
+    const dormRoomIds: string[] = [];
+
     const stayRoom = await prisma.$transaction(async (tx) => {
       const sr = await tx.organizationStayRoom.create({
         data: {
@@ -58,11 +64,16 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       });
 
       if (shouldOccupyRoom(checkIn)) {
-        await tx.room.update({ where: { id: room.id }, data: { status: "occupied" } });
+        const isDorm = await occupyOrganizationRoom(room.id, tx);
+        if (isDorm) dormRoomIds.push(room.id);
       }
 
       return sr;
     });
+
+    if (dormRoomIds.length) {
+      await syncOrganizationDormRooms(dormRoomIds);
+    }
 
     await recalcOrganizationStayAmount(stay.id);
 

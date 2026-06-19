@@ -21,29 +21,51 @@ export function roomStayNights(checkIn: Date, checkOut: Date): number {
   return Math.max(1, mskNightDiff(checkIn, checkOut));
 }
 
-export function calcRoomAmount(price: number, checkIn: Date, checkOut: Date): number {
-  return price * roomStayNights(checkIn, checkOut);
+/** Для общей комнаты — цена за койку × число коек; для номера — одна единица. */
+export function roomBillableUnits(kind: string, bedCount: number): number {
+  return kind === "dorm" ? Math.max(1, bedCount) : 1;
+}
+
+export function calcRoomAmount(
+  price: number,
+  checkIn: Date,
+  checkOut: Date,
+  kind = "private",
+  bedCount = 1
+): number {
+  const units = roomBillableUnits(kind, bedCount);
+  return price * units * roomStayNights(checkIn, checkOut);
 }
 
 export function calcStayRoomsAmount(
-  rooms: { price: number; checkIn: Date; checkOut: Date; status: string; checkedOutAt?: Date | null }[]
+  rooms: {
+    price: number;
+    checkIn: Date;
+    checkOut: Date;
+    status: string;
+    checkedOutAt?: Date | null;
+    kind?: string;
+    bedCount?: number;
+  }[]
 ): number {
   return rooms.reduce((sum, r) => {
     const end = r.status === "checked_out" && r.checkedOutAt ? r.checkedOutAt : r.checkOut;
-    return sum + calcRoomAmount(r.price, r.checkIn, end);
+    return sum + calcRoomAmount(r.price, r.checkIn, end, r.kind ?? "private", r.bedCount ?? 1);
   }, 0);
 }
 
 export async function recalcOrganizationStayAmount(stayId: string): Promise<number> {
   const stay = await prisma.organizationStay.findUnique({
     where: { id: stayId },
-    include: { rooms: { include: { room: true } } },
+    include: { rooms: { include: { room: { include: { beds: true } } } } },
   });
   if (!stay) return 0;
 
   const amount = calcStayRoomsAmount(
     stay.rooms.map((sr) => ({
       price: sr.room.price,
+      kind: sr.room.kind,
+      bedCount: sr.room.beds.length,
       checkIn: sr.checkIn,
       checkOut: sr.checkOut,
       status: sr.status,

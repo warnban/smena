@@ -1,7 +1,9 @@
 import "server-only";
 
+import type { UserRole } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { isExpenseType, isTransactionCancelled } from "@/lib/finance";
+import { canManageSettings } from "@/lib/permissions";
 import { mskDateKey, parseMskDateKey } from "@/lib/msk-time";
 import type { Transaction } from "@/lib/types";
 
@@ -25,7 +27,8 @@ export function isAccommodationTransaction(
 }
 
 export async function canEditTransaction(
-  tx: Transaction & { id: string; hotelId: string; date: Date }
+  tx: Transaction & { id: string; hotelId: string; date: Date },
+  role?: UserRole
 ): Promise<{ ok: true } | { ok: false; reason: string }> {
   if (isTransactionCancelled(tx)) {
     return { ok: false, reason: "Транзакция отменена" };
@@ -42,6 +45,9 @@ export async function canEditTransaction(
   if (salary) return { ok: false, reason: "Зарплатные операции нельзя редактировать" };
 
   const dateKey = mskDateKey(tx.date);
+  if (role && canManageSettings(role)) {
+    return { ok: true };
+  }
   if (await isReportDayClosed(tx.hotelId, dateKey)) {
     return { ok: false, reason: "Сутки закрыты отчётом — редактирование недоступно" };
   }

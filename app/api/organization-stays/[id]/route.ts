@@ -4,6 +4,10 @@ import { getSession } from "@/lib/auth";
 import { assertHotelWrite } from "@/lib/permissions";
 import { apiErrorMessage } from "@/lib/api-error";
 import { parseStayDate, recalcOrganizationStayAmount } from "@/lib/organization-stay";
+import {
+  releaseOrganizationRoom,
+  syncOrganizationDormRooms,
+} from "@/lib/organization-stay-occupancy.server";
 
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
   try {
@@ -24,6 +28,50 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     const checkOut = body.checkOut ? parseStayDate(body.checkOut) : stay.checkOut;
     if (checkOut <= checkIn) {
       return NextResponse.json({ error: "Дата выезда должна быть позже заезда" }, { status: 400 });
+    }
+
+    const cancelling = body.status === "cancelled";
+
+    if (cancelling && stay.status === "active") {
+      const dormRoomIds: string[] = [];
+      await prisma.$transaction(async (tx) => {
+        await tx.organizationStay.update({
+          where: { id: stay.id },
+          data: {
+            checkIn,
+            checkOut,
+            ...(body.notes !== undefined ? { notes: String(body.notes).trim() } : {}),
+            status: "cancelled",
+          },
+        });
+
+        const activeRooms = await tx.organizationStayRoom.findMany({
+          where: { organizationStayId: stay.id, status: "active" },
+          include: { room: { select: { kind: true } } },
+        });
+
+        for (const sr of activeRooms) {
+          await tx.organizationStayRoom.update({
+            where: { id: sr.id },
+            data: { status: "checked_out", checkedOutAt: new Date() },
+          });
+          const isDorm = await releaseOrganizationRoom(sr.roomId, tx);
+          if (isDorm) dormRoomIds.push(sr.roomId);
+        }
+      });
+
+      if (dormRoomIds.length) {
+        await syncOrganizationDormRooms(dormRoomIds);
+      }
+
+      await recalcOrganizationStayAmount(stay.id);
+
+      const full = await prisma.organizationStay.findUnique({
+        where: { id: stay.id },
+        include: { rooms: true },
+      });
+
+      return NextResponse.json({ ok: true, stay: full });
     }
 
     const updated = await prisma.organizationStay.update({

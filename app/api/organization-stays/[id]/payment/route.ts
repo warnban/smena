@@ -1,8 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
-import { assertPaymentsOpen } from "@/lib/payment-lock";
 import { buildOrganizationPaymentNote } from "@/lib/organization-transaction-notes";
+import { assertHotelWrite } from "@/lib/permissions";
+import {
+  assertPaymentOperationAllowed,
+  resolveTransactionDateInput,
+} from "@/lib/transaction-date.server";
 import { apiErrorMessage } from "@/lib/api-error";
 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
@@ -18,10 +22,23 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       return NextResponse.json({ error: "Проживание не найдено" }, { status: 404 });
     }
 
-    const payLock = await assertPaymentsOpen(stay.hotelId);
-    if (!payLock.ok) return NextResponse.json({ error: payLock.error }, { status: payLock.status });
+    const auth = await assertHotelWrite(session, stay.hotelId);
+    if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status });
 
     const body = await req.json();
+
+    const dateResolved = resolveTransactionDateInput(session.role, body.date ?? body.operationDate);
+    if (!dateResolved.ok) {
+      return NextResponse.json({ error: dateResolved.error }, { status: dateResolved.status });
+    }
+
+    const payLock = await assertPaymentOperationAllowed(
+      stay.hotelId,
+      session.role,
+      dateResolved.dateKey
+    );
+    if (!payLock.ok) return NextResponse.json({ error: payLock.error }, { status: payLock.status });
+
     const amount = Math.round(Number(body.amount));
     if (!amount || amount <= 0) {
       return NextResponse.json({ error: "Некорректная сумма" }, { status: 400 });
@@ -39,6 +56,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
           category: "accommodation",
           paymentMethod,
           amount,
+          date: dateResolved.date,
           organizationId: org.id,
           organizationStayId: stay.id,
           guestName: org.name,

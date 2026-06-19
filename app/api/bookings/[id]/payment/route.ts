@@ -4,7 +4,10 @@ import { getSession } from "@/lib/auth";
 import { assertBookingWrite } from "@/lib/booking-auth.server";
 import { OTA_PAYMENT_CODE } from "@/lib/finance";
 import { apiErrorMessage } from "@/lib/api-error";
-import { assertPaymentsOpen } from "@/lib/payment-lock";
+import {
+  assertPaymentOperationAllowed,
+  resolveTransactionDateInput,
+} from "@/lib/transaction-date.server";
 import { buildAccommodationPaymentNote } from "@/lib/booking-transaction-notes";
 import { calcStayAmount } from "@/lib/booking-pricing";
 import {
@@ -23,8 +26,18 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
     const booking = auth.booking;
     const body = await req.json();
+    const session = auth.session;
 
-    const payLock = await assertPaymentsOpen(booking.hotelId);
+    const dateResolved = resolveTransactionDateInput(session.role, body.date ?? body.operationDate);
+    if (!dateResolved.ok) {
+      return NextResponse.json({ error: dateResolved.error }, { status: dateResolved.status });
+    }
+
+    const payLock = await assertPaymentOperationAllowed(
+      booking.hotelId,
+      session.role,
+      dateResolved.dateKey
+    );
     if (!payLock.ok) return NextResponse.json({ error: payLock.error }, { status: payLock.status });
 
     const [discountRules, existingTx] = await Promise.all([
@@ -145,6 +158,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
           category: "accommodation",
           paymentMethod,
           amount: validation.expectedAmount,
+          date: dateResolved.date,
           bookingId: booking.id,
           guestName: booking.guestName,
           roomNumber: booking.room.number,

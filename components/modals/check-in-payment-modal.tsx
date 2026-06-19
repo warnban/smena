@@ -74,6 +74,7 @@ export function CheckInPaymentModal({
                 discountPercent: useRules ? 0 : payload.discountPercent,
                 discountPerNight: useRules ? 0 : payload.discountPerNight,
                 discountRuleId: payload.discountRuleId,
+                operationDate: payload.operationDate,
               }
             : {}),
         }),

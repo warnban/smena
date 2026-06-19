@@ -11,8 +11,10 @@ import { OrganizationFormModal } from "@/components/organizations/organization-f
 import { PaymentHistoryList } from "@/components/payments/payment-history-list";
 import { DatePicker } from "@/components/ui/date-picker";
 import { Select } from "@/components/ui/select";
+import { OperationDateField } from "@/components/ui/operation-date-field";
 import { filterOrganizationTransactions } from "@/lib/organization-payments";
 import { money, fmtDate, dayDiff } from "@/lib/format";
+import { mskDateKey } from "@/lib/msk-time";
 import type { Organization } from "@/lib/types";
 
 function InfoRow({ label, value }: { label: string; value?: string }) {
@@ -27,7 +29,7 @@ function InfoRow({ label, value }: { label: string; value?: string }) {
 export default function OrganizationsPage() {
   const {
     organizations, organizationStays, rooms, hotels, transactions, hotelId,
-    pmConfig, loading, refresh, getCategoryLabel,
+    pmConfig, loading, refresh, getCategoryLabel, canManageSettings,
   } = useApp();
 
   const [search, setSearch] = useState("");
@@ -48,6 +50,7 @@ export default function OrganizationsPage() {
   const [payAmount, setPayAmount] = useState("");
   const [payMethod, setPayMethod] = useState("cash");
   const [payNote, setPayNote] = useState("");
+  const [payOperationDate, setPayOperationDate] = useState(() => mskDateKey());
 
   const scopedStays = useMemo(
     () => (hotelId === "all" ? organizationStays : organizationStays.filter((s) => s.hotelId === hotelId)),
@@ -218,7 +221,12 @@ export default function OrganizationsPage() {
     const res = await fetch(`/api/organization-stays/${activeStay.id}/payment`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ amount, paymentMethod: payMethod, note: payNote }),
+      body: JSON.stringify({
+        amount,
+        paymentMethod: payMethod,
+        note: payNote,
+        operationDate: canManageSettings ? payOperationDate : undefined,
+      }),
     });
     setBusy(false);
     if (!res.ok) {
@@ -477,6 +485,11 @@ export default function OrganizationsPage() {
                           Оплатить
                         </button>
                       </div>
+                      <OperationDateField
+                        enabled={canManageSettings}
+                        value={payOperationDate}
+                        onChange={setPayOperationDate}
+                      />
                     </div>
                   </div>
                 ) : orgStays.length === 0 ? (

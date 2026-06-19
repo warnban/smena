@@ -5,6 +5,7 @@ import { Check, CreditCard, Tag } from "lucide-react";
 import { useApp } from "@/components/providers/app-data";
 import { Icon } from "@/components/icon";
 import { DatePicker } from "@/components/ui/date-picker";
+import { OperationDateField } from "@/components/ui/operation-date-field";
 import { OtaChannelSelect } from "@/components/ui/ota-channel-select";
 import { money, fmtDate } from "@/lib/format";
 import { calcStayAmount } from "@/lib/booking-pricing";
@@ -39,6 +40,7 @@ export type BookingPaymentPayload = {
   discountPercent: number;
   discountPerNight: number;
   discountRuleId?: string;
+  operationDate?: string;
 };
 
 type PeriodMode = "nights" | "date";
@@ -58,7 +60,7 @@ export function BookingPaymentForm({
   busy?: boolean;
   showSubmit?: boolean;
 }) {
-  const { pmConfig, channels, hotelDiscountRules } = useApp();
+  const { pmConfig, channels, hotelDiscountRules, canManageSettings } = useApp();
   const checkOutKey = mskDateKey(booking.checkOut);
   const stayNights = bookingStayNights(booking);
 
@@ -76,6 +78,7 @@ export function BookingPaymentForm({
   const [method, setMethod] = useState("cash");
   const [channelId, setChannelId] = useState("");
   const [note, setNote] = useState("");
+  const [operationDate, setOperationDate] = useState(() => mskDateKey());
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -185,6 +188,7 @@ export function BookingPaymentForm({
       discountPercent: useRules ? 0 : pct,
       discountPerNight: useRules ? 0 : perNight,
       discountRuleId: matchedRule?.id,
+      operationDate: canManageSettings ? operationDate : undefined,
     });
     if (!ok) setError("Не удалось принять платёж");
   }
@@ -375,6 +379,12 @@ export function BookingPaymentForm({
           className="w-full px-3 py-2 text-[12px] rounded-xl outline-none focus:ring-1 focus:ring-ring border border-border bg-muted text-foreground"
         />
       </div>
+
+      <OperationDateField
+        enabled={canManageSettings}
+        value={operationDate}
+        onChange={setOperationDate}
+      />
 
       {error && <p className="text-[12px] text-destructive font-semibold">{error}</p>}
 

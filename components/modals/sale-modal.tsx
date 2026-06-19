@@ -4,7 +4,9 @@ import { useMemo, useState } from "react";
 import { X, Plus, Minus, Check, ShoppingBag, Receipt } from "lucide-react";
 import { useApp } from "@/components/providers/app-data";
 import { Icon } from "@/components/icon";
+import { OperationDateField } from "@/components/ui/operation-date-field";
 import { money } from "@/lib/format";
+import { mskDateKey } from "@/lib/msk-time";
 
 type Mode = "sale" | "expense";
 
@@ -16,6 +18,7 @@ export function SaleModal({ onClose }: { onClose: () => void }) {
   const [cart, setCart] = useState<CartItem[]>([]);
   const [method, setMethod] = useState("cash");
   const [note, setNote] = useState("");
+  const [operationDate, setOperationDate] = useState(() => mskDateKey());
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [showCreate, setShowCreate] = useState(false);
@@ -90,6 +93,7 @@ export function SaleModal({ onClose }: { onClose: () => void }) {
           paymentMethod: method,
           items: cart,
           note: note.trim() || undefined,
+          operationDate: canManageSettings ? operationDate : undefined,
         }),
       });
       const data = await res.json();
@@ -245,6 +249,12 @@ export function SaleModal({ onClose }: { onClose: () => void }) {
               className="w-full px-3 py-2 text-[12px] rounded-xl border border-border bg-muted outline-none"
             />
           )}
+
+          <OperationDateField
+            enabled={canManageSettings}
+            value={operationDate}
+            onChange={setOperationDate}
+          />
 
           {error && <p className="text-[12px] text-destructive font-semibold">{error}</p>}
         </div>

@@ -10,6 +10,11 @@ import {
   recalcOrganizationStayAmount,
   shouldOccupyRoom,
 } from "@/lib/organization-stay";
+import {
+  occupyOrganizationRoom,
+  releaseOrganizationRoomToCleaning,
+  syncOrganizationDormRooms,
+} from "@/lib/organization-stay-occupancy.server";
 
 async function loadStayRoom(stayId: string, roomStayId: string, seatId: string) {
   return prisma.organizationStayRoom.findFirst({
@@ -58,6 +63,8 @@ export async function PATCH(
     const avail = await assertRoomAvailable(sr.roomId, checkIn, checkOut, sr.id);
     if (!avail.ok) return NextResponse.json({ error: avail.error }, { status: 400 });
 
+    const dormRoomIds: string[] = [];
+
     const updated = await prisma.$transaction(async (tx) => {
       const row = await tx.organizationStayRoom.update({
         where: { id: sr.id },
@@ -65,11 +72,16 @@ export async function PATCH(
       });
 
       if (shouldOccupyRoom(checkIn)) {
-        await tx.room.update({ where: { id: sr.roomId }, data: { status: "occupied" } });
+        const isDorm = await occupyOrganizationRoom(sr.roomId, tx);
+        if (isDorm) dormRoomIds.push(sr.roomId);
       }
 
       return row;
     });
+
+    if (dormRoomIds.length) {
+      await syncOrganizationDormRooms(dormRoomIds);
+    }
 
     await recalcOrganizationStayAmount(stay.id);
     return NextResponse.json({ ok: true, room: updated });
@@ -105,17 +117,20 @@ export async function POST(
     const time = hkTimeNow();
     const orgName = sr.organizationStay.organization.name;
 
-    await prisma.$transaction([
-      prisma.organizationStayRoom.update({
+    const dormRoomIds: string[] = [];
+
+    await prisma.$transaction(async (tx) => {
+      await tx.organizationStayRoom.update({
         where: { id: sr.id },
         data: {
           status: "checked_out",
           checkedOutAt: checkoutDate,
           checkOut: checkoutDate,
         },
-      }),
-      prisma.room.update({ where: { id: sr.roomId }, data: { status: "cleaning" } }),
-      prisma.hkTask.create({
+      });
+      const isDorm = await releaseOrganizationRoomToCleaning(sr.roomId, tx);
+      if (isDorm) dormRoomIds.push(sr.roomId);
+      await tx.hkTask.create({
         data: {
           hotelId: sr.organizationStay.hotelId,
           roomId: sr.roomId,
@@ -130,8 +145,12 @@ export async function POST(
           time,
           est: "60 мин",
         },
-      }),
-    ]);
+      });
+    });
+
+    if (dormRoomIds.length) {
+      await syncOrganizationDormRooms(dormRoomIds);
+    }
 
     await recalcOrganizationStayAmount(sr.organizationStayId);
 

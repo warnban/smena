@@ -20,6 +20,8 @@ import { MonthComparisonPanel } from "@/components/reports/month-comparison-pane
 import { CategoryBreakdownPanel } from "@/components/reports/category-breakdown-panel";
 import { TransactionsPanel } from "@/components/reports/transactions-panel";
 import { MetersPanel } from "@/components/reports/meters-panel";
+import { OperationDateField } from "@/components/ui/operation-date-field";
+import { mskDateKey } from "@/lib/msk-time";
 
 export default function ReportsPage() {
   const { transactions, hotelId, bookings, rooms, beds, hotels, pmConfig, transactionCategories, sourceConfig, refresh, loading, canManageSettings } = useApp();
@@ -31,6 +33,7 @@ export default function ReportsPage() {
   const [txPresetDirection, setTxPresetDirection] = useState<"income" | "expense" | null>(null);
   const [encModal, setEncModal] = useState<string | null>(null);
   const [encAmount, setEncAmount] = useState("");
+  const [encOperationDate, setEncOperationDate] = useState(() => mskDateKey());
 
   const activeHotelId = hotelId === "all" ? (hotels[0]?.id ?? "") : hotelId;
   const activeHotelName = hotels.find((h) => h.id === activeHotelId)?.name ?? "";
@@ -118,7 +121,13 @@ export default function ReportsPage() {
     await fetch("/api/encashment", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ hotelId: hid, paymentMethod: encModal, amount, note: "Инкассация" }),
+      body: JSON.stringify({
+        hotelId: hid,
+        paymentMethod: encModal,
+        amount,
+        note: "Инкассация",
+        operationDate: canManageSettings ? encOperationDate : undefined,
+      }),
     });
     setEncModal(null);
     setEncAmount("");
@@ -349,6 +358,11 @@ export default function ReportsPage() {
                 <div className="text-[28px] font-black" style={{ color: encModal ? pmConfig[encModal]?.color : undefined }}>{money(encModal ? balances[encModal] ?? 0 : 0)}</div>
               </div>
               <input type="number" value={encAmount} onChange={(e) => setEncAmount(e.target.value)} className="w-full px-3 py-2.5 text-[15px] font-bold rounded-xl outline-none focus:ring-2 focus:ring-ring border border-border bg-muted text-foreground" />
+              <OperationDateField
+                enabled={canManageSettings}
+                value={encOperationDate}
+                onChange={setEncOperationDate}
+              />
             </div>
             <div className="px-6 py-4 flex gap-2 border-t border-border">
               <button onClick={submitEncashment} className="flex-1 py-2.5 text-white text-[13px] font-bold rounded-xl hover:opacity-90" style={{ background: "linear-gradient(135deg,#EF4444,#DC2626)" }}>Провести</button>

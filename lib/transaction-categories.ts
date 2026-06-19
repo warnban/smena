@@ -34,6 +34,25 @@ export type TransactionCategoryOption = {
   custom?: boolean;
 };
 
+export function buildManualCategoryOptions(
+  custom: { code: string; label: string }[]
+): TransactionCategoryOption[] {
+  const seen = new Set<string>();
+  const out: TransactionCategoryOption[] = [];
+
+  out.push({ code: "extra", label: TX_CAT_LABELS.extra! });
+  seen.add("extra");
+
+  for (const c of custom) {
+    if (MANUAL_TX_BLOCKED_CATEGORIES.has(c.code)) continue;
+    if (seen.has(c.code)) continue;
+    out.push({ code: c.code, label: c.label, custom: true });
+    seen.add(c.code);
+  }
+
+  return out.sort((a, b) => a.label.localeCompare(b.label, "ru"));
+}
+
 export function buildCategoryOptions(
   custom: { code: string; label: string }[]
 ): TransactionCategoryOption[] {

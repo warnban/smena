@@ -12,7 +12,10 @@ import {
 import type { GuestFormData } from "@/lib/guest-form";
 import { OTA_PAYMENT_CODE } from "@/lib/finance";
 import { apiErrorMessage } from "@/lib/api-error";
-import { assertPaymentsOpen } from "@/lib/payment-lock";
+import {
+  assertPaymentOperationAllowed,
+  resolveTransactionDateInput,
+} from "@/lib/transaction-date.server";
 import { buildAccommodationPaymentNote } from "@/lib/booking-transaction-notes";
 import { formatRuleLabel, hotelHasDiscountRules, validatePaymentDiscount } from "@/lib/hotel-discount-rules";
 import {
@@ -177,8 +180,17 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   const guestData = guestUpdatePayload(form, guest.isForeigner);
   const resolvedGuestName = formDisplayName(form) || guestData.name;
 
+  const dateResolved = resolveTransactionDateInput(session.role, body.date ?? body.operationDate);
+  if (!dateResolved.ok) {
+    return NextResponse.json({ error: dateResolved.error }, { status: dateResolved.status });
+  }
+
   if (payNow > 0) {
-    const payLock = await assertPaymentsOpen(booking.hotelId);
+    const payLock = await assertPaymentOperationAllowed(
+      booking.hotelId,
+      session.role,
+      dateResolved.dateKey
+    );
     if (!payLock.ok) {
       return NextResponse.json({ error: payLock.error }, { status: payLock.status });
     }
@@ -268,6 +280,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
           category: "accommodation",
           paymentMethod,
           amount: payNow,
+          date: dateResolved.date,
           bookingId: booking.id,
           guestName: resolvedGuestName,
           roomNumber: booking.room.number,

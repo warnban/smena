@@ -4,7 +4,9 @@ import { useEffect, useMemo, useState } from "react";
 import { X, Plus } from "lucide-react";
 import { CreatableSelect } from "@/components/ui/creatable-select";
 import { Select } from "@/components/ui/select";
-import { buildCategoryOptions } from "@/lib/transaction-categories";
+import { OperationDateField } from "@/components/ui/operation-date-field";
+import { buildManualCategoryOptions } from "@/lib/transaction-categories";
+import { mskDateKey } from "@/lib/msk-time";
 import type { Hotel, TransactionCategoryDef } from "@/lib/types";
 
 export function CreateTransactionSheet({
@@ -14,6 +16,7 @@ export function CreateTransactionSheet({
   hotelId,
   pmConfig,
   transactionCategories,
+  canManageSettings,
   onCreated,
 }: {
   open: boolean;
@@ -22,6 +25,7 @@ export function CreateTransactionSheet({
   hotelId: string | "all";
   pmConfig: Record<string, { label: string; color: string; bg: string; icon: string }>;
   transactionCategories: TransactionCategoryDef[];
+  canManageSettings: boolean;
   onCreated: () => Promise<void>;
 }) {
   const defaultHotel = hotelId === "all" ? (hotels[0]?.id ?? "") : hotelId;
@@ -33,6 +37,7 @@ export function CreateTransactionSheet({
   const [amount, setAmount] = useState("");
   const [guestName, setGuestName] = useState("");
   const [note, setNote] = useState("");
+  const [operationDate, setOperationDate] = useState(() => mskDateKey());
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
@@ -46,6 +51,7 @@ export function CreateTransactionSheet({
       setAmount("");
       setGuestName("");
       setNote("");
+      setOperationDate(mskDateKey());
       setError("");
     }
   }, [open, defaultHotel]);
@@ -60,7 +66,7 @@ export function CreateTransactionSheet({
 
   const categoryOptions = useMemo(
     () =>
-      buildCategoryOptions(transactionCategories).map((c) => ({
+      buildManualCategoryOptions(transactionCategories).map((c) => ({
         value: c.code,
         label: c.label,
       })),
@@ -105,6 +111,7 @@ export function CreateTransactionSheet({
           amount: amt,
           guestName: guestName.trim() || undefined,
           note: note.trim() || undefined,
+          operationDate: canManageSettings ? operationDate : undefined,
         }),
       });
       const data = await res.json();
@@ -187,6 +194,12 @@ export function CreateTransactionSheet({
             }}
             options={categoryOptions}
             placeholder="Выберите или создайте категорию"
+          />
+
+          <OperationDateField
+            enabled={canManageSettings}
+            value={operationDate}
+            onChange={setOperationDate}
           />
 
           <div className="md:grid md:grid-cols-2 md:gap-4">

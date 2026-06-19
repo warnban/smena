@@ -496,6 +496,7 @@ export function TransactionsPanel({
         hotelId={hotelId}
         pmConfig={pmConfig}
         transactionCategories={transactionCategories}
+        canManageSettings={canManageSettings}
         onCreated={onRefresh}
       />
     </>

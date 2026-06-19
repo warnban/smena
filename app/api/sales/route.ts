@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { assertHotelWrite } from "@/lib/permissions";
-import { assertPaymentsOpen } from "@/lib/payment-lock";
+import {
+  assertPaymentOperationAllowed,
+  resolveTransactionDateInput,
+} from "@/lib/transaction-date.server";
 
 type SaleItem = { serviceId: string; qty: number };
 
@@ -23,7 +26,16 @@ export async function POST(req: NextRequest) {
   const auth = await assertHotelWrite(session, hotelId);
   if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status });
 
-  const payLock = await assertPaymentsOpen(hotelId);
+  const dateResolved = resolveTransactionDateInput(auth.session.role, body.date ?? body.operationDate);
+  if (!dateResolved.ok) {
+    return NextResponse.json({ error: dateResolved.error }, { status: dateResolved.status });
+  }
+
+  const payLock = await assertPaymentOperationAllowed(
+    hotelId,
+    auth.session.role,
+    dateResolved.dateKey
+  );
   if (!payLock.ok) return NextResponse.json({ error: payLock.error }, { status: payLock.status });
 
   const services = await prisma.service.findMany({
@@ -87,6 +99,7 @@ export async function POST(req: NextRequest) {
           category: svc.category,
           paymentMethod,
           amount,
+          date: dateResolved.date,
           bookingId,
           guestName: resolvedGuestName,
           roomNumber,

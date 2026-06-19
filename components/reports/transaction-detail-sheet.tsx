@@ -4,8 +4,10 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Pencil, X } from "lucide-react";
 import { Icon } from "@/components/icon";
 import { Select } from "@/components/ui/select";
+import { OperationDateField } from "@/components/ui/operation-date-field";
 import { money } from "@/lib/format";
 import { categoryLabel } from "@/lib/transaction-categories";
+import { mskDateKey } from "@/lib/msk-time";
 import {
   isTransactionCancelled,
   txAmountColor,
@@ -48,6 +50,7 @@ export function TransactionDetailSheet({
   const [amount, setAmount] = useState("");
   const [paymentMethod, setPaymentMethod] = useState("cash");
   const [guestName, setGuestName] = useState("");
+  const [operationDate, setOperationDate] = useState(() => mskDateKey());
 
   useEffect(() => {
     if (!tx) return;
@@ -70,6 +73,7 @@ export function TransactionDetailSheet({
     setAmount(String(tx.amount));
     setPaymentMethod(tx.paymentMethod);
     setGuestName(tx.guestName ?? "");
+    setOperationDate(mskDateKey(tx.date));
 
     if (!canManage) {
       setEditable(false);
@@ -155,6 +159,7 @@ export function TransactionDetailSheet({
           amount: amt,
           paymentMethod,
           guestName: guestName.trim(),
+          operationDate: canManage ? operationDate : undefined,
         }),
       });
       const data = await res.json();
@@ -315,6 +320,14 @@ export function TransactionDetailSheet({
                   className="w-full px-3 py-2.5 text-[13px] rounded-xl border border-border bg-muted outline-none focus:ring-1 focus:ring-ring"
                 />
               </div>
+
+              {canManage && (
+                <OperationDateField
+                  enabled
+                  value={operationDate}
+                  onChange={setOperationDate}
+                />
+              )}
 
               {editError && <p className="text-[12px] text-destructive font-semibold">{editError}</p>}
             </div>

@@ -2,7 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
 import { assertHotelWrite } from "@/lib/permissions";
-import { assertPaymentsOpen } from "@/lib/payment-lock";
+import {
+  assertPaymentOperationAllowed,
+  resolveTransactionDateInput,
+} from "@/lib/transaction-date.server";
 
 export async function POST(req: NextRequest) {
   const session = await getSession();
@@ -16,7 +19,16 @@ export async function POST(req: NextRequest) {
   const auth = await assertHotelWrite(session, String(body.hotelId));
   if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status });
 
-  const payLock = await assertPaymentsOpen(auth.hotel.id);
+  const dateResolved = resolveTransactionDateInput(auth.session.role, body.date ?? body.operationDate);
+  if (!dateResolved.ok) {
+    return NextResponse.json({ error: dateResolved.error }, { status: dateResolved.status });
+  }
+
+  const payLock = await assertPaymentOperationAllowed(
+    auth.hotel.id,
+    auth.session.role,
+    dateResolved.dateKey
+  );
   if (!payLock.ok) return NextResponse.json({ error: payLock.error }, { status: payLock.status });
 
   const tx = await prisma.transaction.create({
@@ -26,6 +38,7 @@ export async function POST(req: NextRequest) {
       category: "encashment",
       paymentMethod: body.paymentMethod ?? "cash",
       amount,
+      date: dateResolved.date,
       note: body.note || "Инкассация",
     },
   });

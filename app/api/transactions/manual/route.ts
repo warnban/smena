@@ -2,13 +2,16 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
 import { assertCanManageHotel } from "@/lib/permissions";
-import { assertPaymentsOpen } from "@/lib/payment-lock";
 import {
   categoryCodeFromLabel,
   MANUAL_TX_BLOCKED_CATEGORIES,
   normalizeCategoryLabel,
 } from "@/lib/transaction-categories";
 import { isReportDayClosed, manualTxTypeFromDirection } from "@/lib/transaction-manual.server";
+import {
+  assertPaymentOperationAllowed,
+  resolveTransactionDateInput,
+} from "@/lib/transaction-date.server";
 import { mskDateKey } from "@/lib/msk-time";
 import { apiErrorMessage } from "@/lib/api-error";
 
@@ -35,11 +38,15 @@ export async function POST(req: NextRequest) {
     const auth = await assertCanManageHotel(session, hotelId);
     if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status });
 
-    const payLock = await assertPaymentsOpen(hotelId);
+    const payLock = await assertPaymentOperationAllowed(hotelId, session.role, mskDateKey());
     if (!payLock.ok) return NextResponse.json({ error: payLock.error }, { status: payLock.status });
 
-    const todayKey = mskDateKey();
-    if (await isReportDayClosed(hotelId, todayKey)) {
+    const dateResolved = resolveTransactionDateInput(session.role, body.date ?? body.operationDate);
+    if (!dateResolved.ok) {
+      return NextResponse.json({ error: dateResolved.error }, { status: dateResolved.status });
+    }
+
+    if (!dateResolved.isBackdate && (await isReportDayClosed(hotelId, dateResolved.dateKey))) {
       return NextResponse.json({ error: "Сутки закрыты отчётом — создание транзакций недоступно" }, { status: 403 });
     }
 
@@ -65,6 +72,7 @@ export async function POST(req: NextRequest) {
           category: code,
           paymentMethod,
           amount,
+          date: dateResolved.date,
           guestName: guestName || null,
           note: note || label,
         },
