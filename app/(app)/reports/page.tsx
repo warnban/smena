@@ -22,7 +22,7 @@ import { TransactionsPanel } from "@/components/reports/transactions-panel";
 import { MetersPanel } from "@/components/reports/meters-panel";
 
 export default function ReportsPage() {
-  const { transactions, hotelId, bookings, rooms, hotels, pmConfig, transactionCategories, sourceConfig, refresh, loading, canManageSettings } = useApp();
+  const { transactions, hotelId, bookings, rooms, beds, hotels, pmConfig, transactionCategories, sourceConfig, refresh, loading, canManageSettings } = useApp();
   const [tab, setTab] = useState<"analytics" | "finance" | "shift" | "daily" | "salaries" | "transactions" | "meters">("analytics");
   const [analyticsView, setAnalyticsView] = useState<"overview" | "comparison">("overview");
   const [pmVis, setPmVis] = useState<Record<string, boolean>>({});
@@ -83,14 +83,19 @@ export default function ReportsPage() {
     [rooms, hotelId]
   );
 
+  const scopedBeds = useMemo(
+    () => (hotelId === "all" ? beds : beds.filter((b) => b.hotelId === hotelId)),
+    [beds, hotelId]
+  );
+
   const revMonthlyData = useMemo(
-    () => buildMonthlyReport(htxns, scopedBookings, scopedRooms, pmCodes),
-    [htxns, scopedBookings, scopedRooms, pmCodes.join(",")]
+    () => buildMonthlyReport(htxns, scopedBookings, scopedRooms, pmCodes, 6, scopedBeds),
+    [htxns, scopedBookings, scopedRooms, scopedBeds, pmCodes.join(",")]
   );
 
   const kpis = useMemo(
-    () => calcKpis(htxns, scopedBookings, scopedRooms, pmCodes),
-    [htxns, scopedBookings, scopedRooms, pmCodes.join(",")]
+    () => calcKpis(htxns, scopedBookings, scopedRooms, pmCodes, scopedBeds),
+    [htxns, scopedBookings, scopedRooms, scopedBeds, pmCodes.join(",")]
   );
 
   const balances = useMemo(

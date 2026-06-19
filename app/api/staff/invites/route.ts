@@ -9,10 +9,11 @@ import {
   ROLE_POSITIONS,
 } from "@/lib/permissions";
 import type { UserRole } from "@prisma/client";
+import { resolvePublicOrigin, staffInviteUrl } from "@/lib/public-url.server";
 
 const INVITE_TTL_DAYS = 7;
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   const session = await getSession();
   const check = await assertCanManage(session);
   if (!check.ok) return NextResponse.json({ error: check.error }, { status: check.status });
@@ -32,7 +33,14 @@ export async function GET() {
     },
   });
 
-  return NextResponse.json({ invites });
+  const origin = resolvePublicOrigin(req);
+
+  return NextResponse.json({
+    invites: invites.map((inv) => ({
+      ...inv,
+      url: staffInviteUrl(origin, inv.token),
+    })),
+  });
 }
 
 export async function POST(req: NextRequest) {
@@ -92,8 +100,8 @@ export async function POST(req: NextRequest) {
     },
   });
 
-  const origin = req.nextUrl.origin;
-  const url = `${origin}/register/staff?token=${invite.token}`;
+  const origin = resolvePublicOrigin(req);
+  const url = staffInviteUrl(origin, invite.token);
 
   return NextResponse.json({ ok: true, invite, url });
 }

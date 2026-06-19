@@ -39,7 +39,7 @@ export async function GET(req: NextRequest) {
       ? { gte: parseMskDateKey(from), lte: parseMskDateKey(to) }
       : undefined;
 
-  const [staff, schedule, ledger, occupancyTiers, hotel, bookings, rooms] = await Promise.all([
+  const [staff, schedule, ledger, occupancyTiers, hotel, bookings, rooms, beds] = await Promise.all([
     prisma.staff.findMany({
       where: staffWhere,
       select: {
@@ -78,6 +78,7 @@ export async function GET(req: NextRequest) {
     }),
     prisma.booking.findMany({ where: { hotelId } }),
     prisma.room.findMany({ where: { hotelId } }),
+    prisma.bed.findMany({ where: { hotelId } }),
   ]);
 
   const scheduleDates = schedule.map((e) => mskDateKey(e.date));
@@ -85,7 +86,7 @@ export async function GET(req: NextRequest) {
   const reportOcc = from && to ? await loadDailyReportOccupancy(prisma, hotelId, from, to) : {};
 
   const { buildOccupancyMap } = await import("@/lib/occupancy-rates");
-  const occupancyByDate = buildOccupancyMap(bookings, rooms, uniqueDates, reportOcc);
+  const occupancyByDate = buildOccupancyMap(bookings, rooms, uniqueDates, reportOcc, beds);
 
   const summaries = buildSalarySummaries({
     schedule: schedule.map((e) => ({
@@ -167,7 +168,7 @@ export async function POST(req: NextRequest) {
         hkShiftRate: true,
       },
     });
-    const [schedule, ledger, occupancyTiers, hotel, bookings, rooms] = await Promise.all([
+    const [schedule, ledger, occupancyTiers, hotel, bookings, rooms, beds] = await Promise.all([
       prisma.workScheduleEntry.findMany({
         where: { hotelId, ...(from && to ? { date: { gte: parseMskDateKey(from), lte: parseMskDateKey(to) } } : {}) },
       }),
@@ -182,12 +183,13 @@ export async function POST(req: NextRequest) {
       prisma.hotel.findUnique({ where: { id: hotelId }, select: { hkSoloRate: true, hkDuoRate: true } }),
       prisma.booking.findMany({ where: { hotelId } }),
       prisma.room.findMany({ where: { hotelId } }),
+      prisma.bed.findMany({ where: { hotelId } }),
     ]);
 
     const scheduleDates = schedule.map((e) => mskDateKey(e.date));
     const reportOcc = from && to ? await loadDailyReportOccupancy(prisma, hotelId, from, to) : {};
     const { buildOccupancyMap } = await import("@/lib/occupancy-rates");
-    const occupancyByDate = buildOccupancyMap(bookings, rooms, Array.from(new Set(scheduleDates)), reportOcc);
+    const occupancyByDate = buildOccupancyMap(bookings, rooms, Array.from(new Set(scheduleDates)), reportOcc, beds);
 
     const summaries = buildSalarySummaries({
       schedule: schedule.map((e) => ({

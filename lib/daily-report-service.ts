@@ -11,14 +11,15 @@ export async function loadHotelReportContext(hotelId: string, seatId: string) {
   const hotel = await prisma.hotel.findFirst({ where: { id: hotelId, seatId } });
   if (!hotel) return null;
 
-  const [transactions, bookings, rooms, paymentMethods] = await Promise.all([
+  const [transactions, bookings, rooms, beds, paymentMethods] = await Promise.all([
     prisma.transaction.findMany({ where: { hotelId }, orderBy: { date: "desc" } }),
     prisma.booking.findMany({ where: { hotelId } }),
     prisma.room.findMany({ where: { hotelId } }),
+    prisma.bed.findMany({ where: { hotelId } }),
     ensurePaymentMethods(seatId),
   ]);
 
-  return { hotel, transactions, bookings, rooms, paymentMethods };
+  return { hotel, transactions, bookings, rooms, beds, paymentMethods };
 }
 
 export async function getShiftForDate(hotelId: string, dateKey: string) {
@@ -43,7 +44,8 @@ export async function buildPreviewReport(
     ctx.rooms,
     dateKey,
     ctx.paymentMethods,
-    shift ?? { dayAdminName: "", nightAdminName: "" }
+    shift ?? { dayAdminName: "", nightAdminName: "" },
+    ctx.beds
   );
 
   return { preview: true as const, date: dateKey, ...data };

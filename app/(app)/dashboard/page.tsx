@@ -25,6 +25,7 @@ import { mskDayAfter, mskDateKey, parseMskDateKey } from "@/lib/msk-time";
 import { useApp } from "@/components/providers/app-data";
 import { money, fmtDate, inits } from "@/lib/format";
 import { calcKpis } from "@/lib/reporting";
+import { occupancyCapacityLabel, occupancySnapshot } from "@/lib/occupancy-capacity";
 import { pmCodes } from "@/lib/payment-methods";
 import type { Booking } from "@/lib/types";
 
@@ -76,7 +77,7 @@ function GuestRow({
 }
 
 export default function DashboardPage() {
-  const { bookings, rooms, hotels, hotelId, transactions, paymentMethods, loading } = useApp();
+  const { bookings, rooms, beds, hotels, hotelId, transactions, paymentMethods, loading } = useApp();
   const [showNewBooking, setShowNewBooking] = useState(false);
   const [checkInBooking, setCheckInBooking] = useState<Booking | null>(null);
   const [selBooking, setSelBooking] = useState<Booking | null>(null);
@@ -98,6 +99,10 @@ export default function DashboardPage() {
     () => (hotelId === "all" ? rooms : rooms.filter((r) => r.hotelId === hotelId)),
     [rooms, hotelId]
   );
+  const scopedBeds = useMemo(
+    () => (hotelId === "all" ? beds : beds.filter((b) => b.hotelId === hotelId)),
+    [beds, hotelId]
+  );
   const scopedTxns = useMemo(
     () => (hotelId === "all" ? transactions : transactions.filter((t) => t.hotelId === hotelId)),
     [transactions, hotelId]
@@ -106,8 +111,8 @@ export default function DashboardPage() {
   const codes = useMemo(() => pmCodes(paymentMethods), [paymentMethods]);
 
   const kpis = useMemo(
-    () => calcKpis(scopedTxns, scopedBookings, scopedRooms, codes),
-    [scopedTxns, scopedBookings, scopedRooms, codes.join(",")]
+    () => calcKpis(scopedTxns, scopedBookings, scopedRooms, codes, scopedBeds),
+    [scopedTxns, scopedBookings, scopedRooms, scopedBeds, codes.join(",")]
   );
 
   const arrivals = scopedBookings.filter(
@@ -128,20 +133,27 @@ export default function DashboardPage() {
     () => buildStayReminders(scopedBookings, mskDateKey(), scopedTxns),
     [scopedBookings, scopedTxns]
   );
-  const occupied = scopedRooms.filter((r) => r.status === "occupied" || r.status === "checkin").length;
+  const todayOccupancy = useMemo(
+    () => occupancySnapshot(scopedBookings, scopedRooms, scopedBeds, TODAY),
+    [scopedBookings, scopedRooms, scopedBeds, TODAY]
+  );
 
   const occChartData = useMemo(() => {
-    const total = Math.max(1, scopedRooms.length);
+    const capacity = Math.max(1, todayOccupancy.capacity);
     const days = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
     return days.map((dname, i) => {
       const day = new Date(TODAY);
       day.setDate(TODAY.getDate() - (6 - i));
       const occ = scopedBookings.filter(
-        (b) => b.checkIn <= day && b.checkOut > day && b.status !== "cancelled"
+        (b) =>
+          b.checkIn <= day &&
+          b.checkOut > day &&
+          b.status !== "cancelled" &&
+          (b.status === "checkedin" || b.status === "confirmed" || b.status === "new")
       ).length;
-      return { d: dname, v: Math.min(100, Math.round((occ / total) * 100)) };
+      return { d: dname, v: Math.min(100, Math.round((occ / capacity) * 100)) };
     });
-  }, [scopedBookings, scopedRooms, TODAY]);
+  }, [scopedBookings, todayOccupancy.capacity, TODAY]);
 
   if (loading) {
     return (
@@ -167,8 +179,9 @@ export default function DashboardPage() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             {hotels.map((h) => {
               const hR = rooms.filter((r) => r.hotelId === h.id);
-              const hOcc = hR.filter((r) => r.status === "occupied" || r.status === "checkin").length;
-              const cap = Math.max(1, hR.length);
+              const hBeds = beds.filter((b) => b.hotelId === h.id);
+              const hBookings = bookings.filter((b) => b.hotelId === h.id);
+              const hOcc = occupancySnapshot(hBookings, hR, hBeds, TODAY);
               return (
                 <div key={h.id} className="bg-card rounded-xl p-4 border border-border">
                   <div className="flex items-center gap-2.5 mb-3">
@@ -182,11 +195,11 @@ export default function DashboardPage() {
                   </div>
                   <div className="flex justify-between text-[12px]">
                     <div>
-                      <div className="font-black text-[18px] text-primary">{Math.round((hOcc / cap) * 100)}%</div>
+                      <div className="font-black text-[18px] text-primary">{hOcc.pct}%</div>
                       <div className="text-muted-foreground">загрузка</div>
                     </div>
                     <div>
-                      <div className="font-black text-[18px] text-foreground">{hOcc}/{hR.length}</div>
+                      <div className="font-black text-[18px] text-foreground">{hOcc.occupied}/{hOcc.capacity}</div>
                       <div className="text-muted-foreground">занято</div>
                     </div>
                   </div>
@@ -197,7 +210,7 @@ export default function DashboardPage() {
         )}
 
         <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-3">
-          <KpiCard label="Загрузка" value={`${Math.round((occupied / Math.max(1, scopedRooms.length)) * 100)}%`} sub={`${occupied}/${scopedRooms.length} ном.`} trend="+5%" trendDir="up" accent="#3B82F6" spark={[62, 68, 71, 79, 77]} />
+          <KpiCard label="Загрузка" value={`${todayOccupancy.pct}%`} sub={occupancyCapacityLabel(todayOccupancy.occupied, todayOccupancy.capacity)} trend="+5%" trendDir="up" accent="#3B82F6" spark={[62, 68, 71, 79, 77]} />
           <KpiCard label="Заезды сегодня" value={String(arrivals.length)} sub="гостей" trend="+2" trendDir="up" accent="#F59E0B" spark={[1, 3, 2, 4, 3]} />
           <KpiCard label="Выезды сегодня" value={String(departures.length)} sub="гостей" accent="#6366F1" spark={[2, 1, 3, 2, 2]} />
           <button

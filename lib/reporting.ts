@@ -1,4 +1,5 @@
-import type { Booking, Room, Transaction } from "@/lib/types";
+import type { Bed, Booking, Room, Transaction } from "@/lib/types";
+import { sellableUnits } from "@/lib/occupancy-capacity";
 import {
   isExpenseType,
   revenueAmount,
@@ -78,11 +79,12 @@ export function calcMonthStats(
   bookings: Booking[],
   rooms: Room[],
   year: number,
-  month: number
+  month: number,
+  beds: Bed[] = []
 ): MonthStats {
   const { start, end, days } = monthBounds(year, month);
-  const roomCount = rooms.length;
-  const availableNights = roomCount * days;
+  const unitCount = sellableUnits(rooms, beds);
+  const availableNights = unitCount * days;
   const soldNights = countSoldNights(bookings, start, end);
   const roomRevenue = roomRevenueInMonth(transactions, bookings, year, month);
 
@@ -104,7 +106,8 @@ export function buildMonthlyReport(
   bookings: Booking[],
   rooms: Room[],
   paymentCodes: string[],
-  months = 6
+  months = 6,
+  beds: Bed[] = []
 ): MonthlyReportRow[] {
   const now = new Date();
   const rows: MonthlyReportRow[] = [];
@@ -129,7 +132,7 @@ export function buildMonthlyReport(
       else pm[t.paymentMethod] = (pm[t.paymentMethod] ?? 0) + signed;
     });
 
-    const stats = calcMonthStats(transactions, bookings, rooms, year, month);
+    const stats = calcMonthStats(transactions, bookings, rooms, year, month, beds);
 
     rows.push({
       m: label,
@@ -149,9 +152,10 @@ export function calcKpis(
   transactions: Transaction[],
   bookings: Booking[],
   rooms: Room[],
-  paymentCodes: string[] = []
+  paymentCodes: string[] = [],
+  beds: Bed[] = []
 ) {
-  const monthly = buildMonthlyReport(transactions, bookings, rooms, paymentCodes, 6);
+  const monthly = buildMonthlyReport(transactions, bookings, rooms, paymentCodes, 6, beds);
   const current = monthly[monthly.length - 1];
   const prev = monthly[monthly.length - 2];
 
@@ -161,7 +165,8 @@ export function calcKpis(
     bookings,
     rooms,
     now.getFullYear(),
-    now.getMonth()
+    now.getMonth(),
+    beds
   );
   const prevMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
   const prevStats = calcMonthStats(
@@ -169,7 +174,8 @@ export function calcKpis(
     bookings,
     rooms,
     prevMonth.getFullYear(),
-    prevMonth.getMonth()
+    prevMonth.getMonth(),
+    beds
   );
 
   const totalRev = monthly.reduce((s, r) => s + r.rev, 0);

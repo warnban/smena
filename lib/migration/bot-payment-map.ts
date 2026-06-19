@@ -10,7 +10,9 @@ const KNOWN: Record<string, { code: string; label: string; color: string; bg: st
   "через партнёра": { code: "ota", label: "OTA предопл.", color: "#D97706", bg: "#FFFBEB", icon: "Globe" },
   "через партнера": { code: "ota", label: "OTA предопл.", color: "#D97706", bg: "#FFFBEB", icon: "Globe" },
   "комфорт букинг": { code: "ota", label: "OTA предопл.", color: "#D97706", bg: "#FFFBEB", icon: "Globe" },
+  "комофрт букинг": { code: "ota", label: "OTA предопл.", color: "#D97706", bg: "#FFFBEB", icon: "Globe" },
   "фактический выезд": { code: "ota", label: "OTA предопл.", color: "#D97706", bg: "#FFFBEB", icon: "Globe" },
+  "все способы": { code: "cash", label: "Наличные", color: "#059669", bg: "#F0FDF4", icon: "Banknote" },
 };
 
 function slugCode(label: string): string {

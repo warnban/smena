@@ -1,4 +1,4 @@
-import type { Booking, Room, Transaction } from "@/lib/types";
+import type { Bed, Booking, Room, Transaction } from "@/lib/types";
 import { calcMonthStats } from "@/lib/reporting";
 import { mskDateKey, parseMskDateKey } from "@/lib/msk-time";
 import type { KpiMetric } from "@prisma/client";
@@ -38,9 +38,10 @@ export function buildKpiSnapshot(
   bookings: Booking[],
   rooms: Room[],
   year: number,
-  month: number
+  month: number,
+  beds: Bed[] = []
 ): KpiSnapshot {
-  const stats = calcMonthStats(transactions, bookings, rooms, year, month);
+  const stats = calcMonthStats(transactions, bookings, rooms, year, month, beds);
   const cashRevenue = transactions
     .filter((t) => {
       const key = mskDateKey(t.date);

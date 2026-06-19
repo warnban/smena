@@ -1,4 +1,4 @@
-import type { Booking, Room, Transaction } from "@/lib/types";
+import type { Bed, Booking, Room, Transaction } from "@/lib/types";
 import type { PaymentMethodDef } from "@/lib/payment-methods";
 import { buildDailyCloseReport, type DailyPmBreakdown } from "@/lib/daily-report";
 import { calcCashBalance } from "@/lib/finance";
@@ -30,18 +30,22 @@ export function buildShiftHandover(
   rooms: Room[],
   paymentMethods: PaymentMethodDef[],
   hotelId: string,
-  dateKey = mskDateKey()
+  dateKey = mskDateKey(),
+  beds: Bed[] = []
 ): ShiftHandoverData {
   const hotelTx = transactions.filter((t) => t.hotelId === hotelId);
   const hotelBookings = bookings.filter((b) => b.hotelId === hotelId);
   const hotelRooms = rooms.filter((r) => r.hotelId === hotelId);
+  const hotelBeds = beds.filter((b) => b.hotelId === hotelId);
 
   const todayReport = buildDailyCloseReport(
     hotelTx,
     hotelBookings,
     hotelRooms,
     dateKey,
-    paymentMethods
+    paymentMethods,
+    undefined,
+    hotelBeds
   );
 
   const unpaidGuests = filterPaymentDueBookings(hotelBookings, dateKey)

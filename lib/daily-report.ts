@@ -1,6 +1,7 @@
-import type { Booking, Room, Transaction } from "@/lib/types";
+import type { Bed, Booking, Room, Transaction } from "@/lib/types";
 import type { PaymentMethodDef } from "@/lib/payment-methods";
 import { money, fmtDateRu } from "@/lib/format";
+import { calcOccupancyPct, sellableUnits } from "@/lib/occupancy-capacity";
 import {
   calcCashBalance,
   expenseAmount,
@@ -40,15 +41,13 @@ function sameDay(a: Date, b: Date): boolean {
   return a.toDateString() === b.toDateString();
 }
 
-function countDayOccupancy(bookings: Booking[], rooms: Room[], date: Date): number {
-  const occupied = bookings.filter(
-    (b) =>
-      b.status !== "cancelled" &&
-      b.checkIn <= date &&
-      b.checkOut > date &&
-      (b.status === "checkedin" || b.status === "confirmed" || b.status === "new")
-  ).length;
-  return rooms.length > 0 ? Math.round((occupied / rooms.length) * 100) : 0;
+function countDayOccupancy(
+  bookings: Booking[],
+  rooms: Room[],
+  beds: Bed[],
+  date: Date
+): number {
+  return calcOccupancyPct(bookings, rooms, beds, date);
 }
 
 function previousDateKey(dateKey: string): string {
@@ -63,7 +62,8 @@ export function buildDailyCloseReport(
   rooms: Room[],
   dateKey: string,
   paymentMethods: PaymentMethodDef[],
-  shift?: { dayAdminName: string; nightAdminName: string }
+  shift?: { dayAdminName: string; nightAdminName: string },
+  beds: Bed[] = []
 ): DailyReportData {
   const date = parseMskDateKey(dateKey);
   const dayTx = transactions.filter((t) => transactionOnReportMskDay(t, bookings, dateKey));
@@ -106,9 +106,9 @@ export function buildDailyCloseReport(
   }, 0);
 
   return {
-    occupancy: countDayOccupancy(bookings, rooms, date),
+    occupancy: countDayOccupancy(bookings, rooms, beds, date),
     soldNights,
-    availableNights: rooms.length,
+    availableNights: sellableUnits(rooms, beds),
     accommodationTotal,
     grandTotal,
     expensesTotal,

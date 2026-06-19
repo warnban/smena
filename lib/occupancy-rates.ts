@@ -1,27 +1,19 @@
-import type { Booking, Room } from "@/lib/types";
+import type { Bed, Booking, Room } from "@/lib/types";
+import { calcOccupancyPctByDateKey } from "@/lib/occupancy-capacity";
 import { mskDateKey, parseMskDateKey } from "@/lib/msk-time";
-
-function countDayOccupancy(bookings: Booking[], rooms: Room[], dateKey: string): number {
-  const date = parseMskDateKey(dateKey);
-  const occupied = bookings.filter(
-    (b) =>
-      b.status !== "cancelled" &&
-      b.checkIn <= date &&
-      b.checkOut > date &&
-      (b.status === "checkedin" || b.status === "confirmed" || b.status === "new")
-  ).length;
-  return rooms.length > 0 ? Math.round((occupied / rooms.length) * 100) : 0;
-}
 
 export function buildOccupancyMap(
   bookings: Booking[],
   rooms: Room[],
   dateKeys: string[],
-  dailyReportOccupancy: Record<string, number> = {}
+  dailyReportOccupancy: Record<string, number> = {},
+  beds: Bed[] = []
 ): Record<string, number> {
   const out: Record<string, number> = {};
   for (const key of dateKeys) {
-    out[key] = dailyReportOccupancy[key] ?? countDayOccupancy(bookings, rooms, key);
+    out[key] =
+      dailyReportOccupancy[key] ??
+      calcOccupancyPctByDateKey(bookings, rooms, beds, key);
   }
   return out;
 }

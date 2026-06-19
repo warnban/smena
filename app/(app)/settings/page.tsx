@@ -22,6 +22,7 @@ const ROLE_LABELS: Record<string, string> = {
 interface PendingInvite {
   id: string;
   token: string;
+  url?: string;
   role: UserRole;
   position: string;
   hotelIds: string[];
@@ -156,7 +157,11 @@ export default function SettingsPage() {
               <div className="bg-[#FFFBEB] border border-[#FDE68A] rounded-xl p-4 space-y-2">
                 <p className="text-[12px] font-bold text-[#92400E]">Активные приглашения</p>
                 {invites.map((inv) => {
-                  const url = `${window.location.origin}/register/staff?token=${inv.token}`;
+                  const url =
+                    inv.url ||
+                    (typeof window !== "undefined" && !window.location.origin.includes("0.0.0.0")
+                      ? `${window.location.origin}/register/staff?token=${inv.token}`
+                      : `/register/staff?token=${inv.token}`);
                   return (
                     <div key={inv.id} className="flex flex-wrap items-center gap-2 text-[11px]">
                       <span className="font-semibold text-foreground">{ROLE_LABELS[inv.role]}</span>

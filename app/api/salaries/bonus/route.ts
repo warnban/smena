@@ -65,7 +65,7 @@ export async function POST(req: NextRequest) {
     const { year, month } = { year: Number(periodMonth.slice(0, 4)), month: Number(periodMonth.slice(5, 7)) - 1 };
     const { from, to } = periodMonthKeys(periodMonth);
 
-    const [rules, staff, schedule, transactions, bookings, rooms] = await Promise.all([
+    const [rules, staff, schedule, transactions, bookings, rooms, beds] = await Promise.all([
       prisma.kpiBonusRule.findMany({ where: { hotelId, active: true }, orderBy: { sortOrder: "asc" } }),
       prisma.staff.findMany({
         where: { seatId: session.seatId, hotels: { some: { hotelId } } },
@@ -78,11 +78,12 @@ export async function POST(req: NextRequest) {
       prisma.transaction.findMany({ where: { hotelId } }),
       prisma.booking.findMany({ where: { hotelId } }),
       prisma.room.findMany({ where: { hotelId } }),
+      prisma.bed.findMany({ where: { hotelId } }),
     ]);
 
     const staffWithShifts = new Set(schedule.map((s) => s.staffId));
     const eligibleStaff = staff.filter((s) => staffWithShifts.has(s.id));
-    const snapshot = buildKpiSnapshot(transactions, bookings, rooms, year, month);
+    const snapshot = buildKpiSnapshot(transactions, bookings, rooms, year, month, beds);
     const met = rulesMet(snapshot, rules);
 
     /** Каждый сотрудник со сменами получает полную сумму по каждому выполненному правилу. */

@@ -5,7 +5,7 @@ import { RefreshCw } from "lucide-react";
 import { Icon } from "@/components/icon";
 import { useApp } from "@/components/providers/app-data";
 import { money, fmtDate } from "@/lib/format";
-import { fmtMskDateTime } from "@/lib/msk-time";
+import { fmtMskDateTime, mskDateKey } from "@/lib/msk-time";
 import { buildShiftHandover } from "@/lib/shift-handover";
 
 export function ShiftHandoverPanel({
@@ -17,11 +17,11 @@ export function ShiftHandoverPanel({
   hotelName: string;
   pmConfig: Record<string, { label: string; color: string; bg: string; icon: string }>;
 }) {
-  const { transactions, bookings, rooms, paymentMethods } = useApp();
+  const { transactions, bookings, rooms, beds, paymentMethods } = useApp();
 
   const data = useMemo(
-    () => buildShiftHandover(transactions, bookings, rooms, paymentMethods, hotelId),
-    [transactions, bookings, rooms, paymentMethods, hotelId]
+    () => buildShiftHandover(transactions, bookings, rooms, paymentMethods, hotelId, mskDateKey(), beds),
+    [transactions, bookings, rooms, beds, paymentMethods, hotelId]
   );
 
   const nowLabel = fmtMskDateTime(new Date());
