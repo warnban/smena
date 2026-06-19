@@ -1,5 +1,11 @@
-import type { Bed, Booking, Room } from "@/lib/types";
+import type { Bed, Booking, Room, RoomStatus } from "@/lib/types";
 import { parseMskDateKey } from "@/lib/msk-time";
+
+const LIVE_OCCUPIED_STATUSES: RoomStatus[] = ["occupied", "checkin", "checkout"];
+
+function isLiveOccupied(status: RoomStatus): boolean {
+  return LIVE_OCCUPIED_STATUSES.includes(status);
+}
 
 function bedsInRoom(roomId: string, beds: Bed[]): number {
   return beds.filter((b) => b.roomId === roomId).length;
@@ -61,6 +67,31 @@ export function occupancySnapshot(
 ): { occupied: number; capacity: number; pct: number } {
   const capacity = sellableUnits(rooms, beds);
   const occupied = countOccupiedUnits(bookings, date);
+  const pct = capacity > 0 ? Math.round((occupied / capacity) * 100) : 0;
+  return { occupied, capacity, pct };
+}
+
+/** Занятые единицы «прямо сейчас» по статусам номеров и коек. */
+export function countLiveOccupiedUnits(rooms: Room[], beds: Bed[]): number {
+  let occupied = 0;
+  for (const room of rooms) {
+    if (room.kind === "dorm") {
+      occupied += beds.filter(
+        (b) => b.roomId === room.id && isLiveOccupied(b.status)
+      ).length;
+    } else if (isLiveOccupied(room.status)) {
+      occupied += 1;
+    }
+  }
+  return occupied;
+}
+
+export function liveOccupancySnapshot(
+  rooms: Room[],
+  beds: Bed[]
+): { occupied: number; capacity: number; pct: number } {
+  const capacity = sellableUnits(rooms, beds);
+  const occupied = countLiveOccupiedUnits(rooms, beds);
   const pct = capacity > 0 ? Math.round((occupied / capacity) * 100) : 0;
   return { occupied, capacity, pct };
 }

@@ -25,7 +25,7 @@ import { mskDayAfter, mskDateKey, parseMskDateKey } from "@/lib/msk-time";
 import { useApp } from "@/components/providers/app-data";
 import { money, fmtDate, inits } from "@/lib/format";
 import { calcKpis } from "@/lib/reporting";
-import { occupancyCapacityLabel, occupancySnapshot } from "@/lib/occupancy-capacity";
+import { occupancyCapacityLabel, liveOccupancySnapshot } from "@/lib/occupancy-capacity";
 import { pmCodes } from "@/lib/payment-methods";
 import type { Booking } from "@/lib/types";
 
@@ -134,8 +134,8 @@ export default function DashboardPage() {
     [scopedBookings, scopedTxns]
   );
   const todayOccupancy = useMemo(
-    () => occupancySnapshot(scopedBookings, scopedRooms, scopedBeds, TODAY),
-    [scopedBookings, scopedRooms, scopedBeds, TODAY]
+    () => liveOccupancySnapshot(scopedRooms, scopedBeds),
+    [scopedRooms, scopedBeds]
   );
 
   const occChartData = useMemo(() => {
@@ -180,8 +180,7 @@ export default function DashboardPage() {
             {hotels.map((h) => {
               const hR = rooms.filter((r) => r.hotelId === h.id);
               const hBeds = beds.filter((b) => b.hotelId === h.id);
-              const hBookings = bookings.filter((b) => b.hotelId === h.id);
-              const hOcc = occupancySnapshot(hBookings, hR, hBeds, TODAY);
+              const hOcc = liveOccupancySnapshot(hR, hBeds);
               return (
                 <div key={h.id} className="bg-card rounded-xl p-4 border border-border">
                   <div className="flex items-center gap-2.5 mb-3">
@@ -210,7 +209,15 @@ export default function DashboardPage() {
         )}
 
         <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-3">
-          <KpiCard label="Загрузка" value={`${todayOccupancy.pct}%`} sub={occupancyCapacityLabel(todayOccupancy.occupied, todayOccupancy.capacity)} trend="+5%" trendDir="up" accent="#3B82F6" spark={[62, 68, 71, 79, 77]} />
+          <KpiCard
+            label="Загрузка"
+            value={`${todayOccupancy.pct}%`}
+            sub={occupancyCapacityLabel(todayOccupancy.occupied, todayOccupancy.capacity)}
+            trend={kpis.occupancyTrend ? `${kpis.occupancyTrend > 0 ? "+" : ""}${kpis.occupancyTrend}%` : undefined}
+            trendDir={kpis.occupancyTrend >= 0 ? "up" : "down"}
+            accent="#3B82F6"
+            spark={kpis.spark}
+          />
           <KpiCard label="Заезды сегодня" value={String(arrivals.length)} sub="гостей" trend="+2" trendDir="up" accent="#F59E0B" spark={[1, 3, 2, 4, 3]} />
           <KpiCard label="Выезды сегодня" value={String(departures.length)} sub="гостей" accent="#6366F1" spark={[2, 1, 3, 2, 2]} />
           <button
