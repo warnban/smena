@@ -4,6 +4,7 @@ import { purgeImportedData } from "@/lib/migration/purge-import.server";
 import { apiErrorMessage } from "@/lib/api-error";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 600;
 
 export async function POST() {
   try {

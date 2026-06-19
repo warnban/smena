@@ -14,6 +14,28 @@ export type PurgeImportResult = {
   };
 };
 
+const BATCH_SIZE = 400;
+
+function chunks<T>(arr: T[], size: number): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < arr.length; i += size) {
+    out.push(arr.slice(i, i + size));
+  }
+  return out;
+}
+
+async function sumBatchedDelete(
+  ids: string[],
+  run: (batch: string[]) => Promise<{ count: number }>
+): Promise<number> {
+  let total = 0;
+  for (const batch of chunks(ids, BATCH_SIZE)) {
+    const r = await run(batch);
+    total += r.count;
+  }
+  return total;
+}
+
 export async function purgeImportedData(seatId: string): Promise<PurgeImportResult> {
   const hotels = await prisma.hotel.findMany({
     where: { seatId },
@@ -61,6 +83,7 @@ export async function purgeImportedData(seatId: string): Promise<PurgeImportResu
   }
 
   const bookingIds = Array.from(bookingIdSet);
+  const guestIds = Array.from(guestIdSet);
 
   const markerTransactions = await prisma.transaction.findMany({
     where: {
@@ -84,46 +107,47 @@ export async function purgeImportedData(seatId: string): Promise<PurgeImportResu
   let deletedTransactions = 0;
   let deletedBookings = 0;
   let deletedGuests = 0;
-  let deletedMaps = 0;
 
-  await prisma.$transaction(async (tx) => {
-    if (transactionIds.length) {
-      const refunds = await tx.refundRecord.deleteMany({
-        where: { transactionId: { in: transactionIds } },
-      });
-      void refunds;
-
-      const salaryUnlink = await tx.salaryLedgerEntry.updateMany({
-        where: { transactionId: { in: transactionIds } },
+  if (transactionIds.length) {
+    await sumBatchedDelete(transactionIds, (batch) =>
+      prisma.refundRecord.deleteMany({ where: { transactionId: { in: batch } } })
+    );
+    await sumBatchedDelete(transactionIds, (batch) =>
+      prisma.salaryLedgerEntry.updateMany({
+        where: { transactionId: { in: batch } },
         data: { transactionId: null },
-      });
-      void salaryUnlink;
+      })
+    );
+    deletedTransactions = await sumBatchedDelete(transactionIds, (batch) =>
+      prisma.transaction.deleteMany({ where: { id: { in: batch } } })
+    );
+  }
 
-      const r = await tx.transaction.deleteMany({ where: { id: { in: transactionIds } } });
-      deletedTransactions = r.count;
-    }
-
-    if (bookingIds.length) {
-      await tx.refundRecord.deleteMany({ where: { bookingId: { in: bookingIds } } });
-      await tx.serviceSale.deleteMany({ where: { bookingId: { in: bookingIds } } });
-      await tx.hkTask.updateMany({
-        where: { bookingId: { in: bookingIds } },
+  if (bookingIds.length) {
+    await sumBatchedDelete(bookingIds, (batch) =>
+      prisma.refundRecord.deleteMany({ where: { bookingId: { in: batch } } })
+    );
+    await sumBatchedDelete(bookingIds, (batch) =>
+      prisma.serviceSale.deleteMany({ where: { bookingId: { in: batch } } })
+    );
+    await sumBatchedDelete(bookingIds, (batch) =>
+      prisma.hkTask.updateMany({
+        where: { bookingId: { in: batch } },
         data: { bookingId: null },
-      });
-      const r = await tx.booking.deleteMany({ where: { id: { in: bookingIds } } });
-      deletedBookings = r.count;
-    }
+      })
+    );
+    deletedBookings = await sumBatchedDelete(bookingIds, (batch) =>
+      prisma.booking.deleteMany({ where: { id: { in: batch } } })
+    );
+  }
 
-    if (guestIdSet.size) {
-      const r = await tx.guest.deleteMany({
-        where: { id: { in: Array.from(guestIdSet) }, seatId },
-      });
-      deletedGuests = r.count;
-    }
+  if (guestIds.length) {
+    deletedGuests = await sumBatchedDelete(guestIds, (batch) =>
+      prisma.guest.deleteMany({ where: { id: { in: batch }, seatId } })
+    );
+  }
 
-    const mapResult = await tx.botMigrationMap.deleteMany({ where: { seatId } });
-    deletedMaps = mapResult.count;
-  });
+  const mapResult = await prisma.botMigrationMap.deleteMany({ where: { seatId } });
 
   const bedsReset = await prisma.bed.updateMany({
     where: { hotelId: { in: hotelIds }, status: { not: "available" } },
@@ -141,7 +165,7 @@ export async function purgeImportedData(seatId: string): Promise<PurgeImportResu
       transactions: deletedTransactions,
       bookings: deletedBookings,
       guests: deletedGuests,
-      migrationMaps: deletedMaps,
+      migrationMaps: mapResult.count,
       bedsReset: bedsReset.count,
       roomsReset: roomsReset.count,
     },
