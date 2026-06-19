@@ -9,8 +9,7 @@ import { PM_COLOR_PRESETS, colorToBg } from "@/lib/color-utils";
 import { HotelDiscountRulesEditor } from "@/components/settings/hotel-discount-rules-editor";
 import { SalarySettingsEditor } from "@/components/settings/salary-settings-editor";
 import { NetworkFaqEditor } from "@/components/settings/network-faq-editor";
-import { MigrationPanel } from "@/components/settings/migration-panel";
-import { ExcelMigrationPanel } from "@/components/settings/excel-migration-panel";
+import { PurgeImportPanel } from "@/components/settings/purge-import-panel";
 import { Select } from "@/components/ui/select";
 
 const ROLE_LABELS: Record<string, string> = {
@@ -234,10 +233,7 @@ export default function SettingsPage() {
 
         {sTab === "system" && (
           <div className="space-y-8">
-            <ExcelMigrationPanel canEdit={session?.role === "owner"} />
-            <div className="border-t border-border pt-6">
-              <MigrationPanel canEdit={session?.role === "owner"} />
-            </div>
+            <PurgeImportPanel canEdit={session?.role === "owner"} />
             <div className="border-t border-border pt-6">
               <NetworkFaqEditor canEdit={canManageSettings} />
             </div>
