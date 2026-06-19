@@ -10,6 +10,7 @@ import { HotelDiscountRulesEditor } from "@/components/settings/hotel-discount-r
 import { SalarySettingsEditor } from "@/components/settings/salary-settings-editor";
 import { NetworkFaqEditor } from "@/components/settings/network-faq-editor";
 import { MigrationPanel } from "@/components/settings/migration-panel";
+import { ExcelMigrationPanel } from "@/components/settings/excel-migration-panel";
 import { Select } from "@/components/ui/select";
 
 const ROLE_LABELS: Record<string, string> = {
@@ -233,7 +234,10 @@ export default function SettingsPage() {
 
         {sTab === "system" && (
           <div className="space-y-8">
-            <MigrationPanel canEdit={session?.role === "owner"} />
+            <ExcelMigrationPanel canEdit={session?.role === "owner"} />
+            <div className="border-t border-border pt-6">
+              <MigrationPanel canEdit={session?.role === "owner"} />
+            </div>
             <div className="border-t border-border pt-6">
               <NetworkFaqEditor canEdit={canManageSettings} />
             </div>
