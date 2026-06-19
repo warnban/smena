@@ -8,6 +8,7 @@ import { calcStayAmount } from "@/lib/booking-pricing";
 import { hotelHasDiscountRules } from "@/lib/hotel-discount-rules";
 import type { Booking } from "@/lib/types";
 import type { GuestFormData } from "@/lib/guest-form";
+import { formDisplayName } from "@/lib/guest-form";
 import { BookingPaymentForm, type BookingPaymentPayload } from "@/components/bookings/booking-payment-form";
 
 export function CheckInPaymentModal({
@@ -45,6 +46,7 @@ export function CheckInPaymentModal({
     [roomPrice, booking]
   );
 
+  const displayGuestName = useMemo(() => formDisplayName(form), [form]);
   const debt = Math.max(0, totalAmount - booking.paid);
   const needsPayment = debt > 0;
 
@@ -116,7 +118,7 @@ export function CheckInPaymentModal({
           <div>
             <h2 className="text-[15px] font-bold text-foreground">Оплата проживания</h2>
             <p className="text-[12px] text-muted-foreground">
-              {booking.guestName} · №{room?.number}
+              {displayGuestName} · №{room?.number}
             </p>
           </div>
           <button onClick={onClose} className="p-1.5 rounded-lg text-muted-foreground hover:bg-muted">

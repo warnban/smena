@@ -121,11 +121,11 @@ export function AssistantPanel() {
         <button
           type="button"
           onClick={() => setOpen(true)}
-          className="fixed z-40 bottom-[calc(4.5rem+env(safe-area-inset-bottom))] md:bottom-6 right-4 md:right-6 w-14 h-14 rounded-full shadow-lg flex items-center justify-center text-white"
+          className="hidden md:flex fixed z-40 bottom-5 right-5 w-11 h-11 rounded-full shadow-md flex items-center justify-center text-white hover:opacity-90 transition-opacity"
           style={{ background: "linear-gradient(135deg,#6366F1,#3B82F6)" }}
           aria-label="AI-помощник"
         >
-          <Bot size={24} />
+          <Bot size={20} />
         </button>
       )}
 

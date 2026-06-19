@@ -11,6 +11,7 @@ import { Icon } from "@/components/icon";
 import { fmtDate, dayDiff } from "@/lib/format";
 import {
   guestToForm,
+  formDisplayName,
   migRegDeadlineFrom,
   effectiveMigStatus,
   validateCheckInForm,
@@ -63,6 +64,7 @@ export function CheckInModal({
   }, [booking.id]);
 
   const nights = dayDiff(booking.checkIn, booking.checkOut);
+  const displayGuestName = useMemo(() => formDisplayName(form) || guest?.name || "", [form, guest?.name]);
   const deadline = useMemo(
     () => guest?.migRegDeadline || migRegDeadlineFrom(booking.checkIn),
     [guest, booking.checkIn]
@@ -92,13 +94,14 @@ export function CheckInModal({
       const res = await fetch(`/api/guests/${guest!.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ form, regCardSigned: true, isForeigner: effectiveForeigner }),
+        body: JSON.stringify({ form, regCardSigned: true, isForeigner: effectiveForeigner, bookingId: booking.id }),
       });
       const data = (await res.json().catch(() => ({}))) as { error?: string };
       if (!res.ok) {
         setError(data.error ?? "Не удалось сохранить данные гостя");
         return;
       }
+      await refreshSilent();
       setPrintOpen(true);
     } catch {
       setError("Ошибка сохранения данных гостя");
@@ -280,7 +283,7 @@ export function CheckInModal({
       <CheckInPrintModal
         guestId={guest.id}
         bookingId={booking.id}
-        guestName={guest.name}
+        guestName={displayGuestName}
         onClose={() => setPrintOpen(false)}
         onContinue={() => {
           setPrintOpen(false);

@@ -7,6 +7,7 @@ import {
   guestUpdatePayload,
   migRegDeadlineFrom,
   validateCheckInForm,
+  formDisplayName,
 } from "@/lib/guest-form";
 import type { GuestFormData } from "@/lib/guest-form";
 import { OTA_PAYMENT_CODE } from "@/lib/finance";
@@ -174,6 +175,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   }
 
   const guestData = guestUpdatePayload(form, guest.isForeigner);
+  const resolvedGuestName = formDisplayName(form) || guestData.name;
 
   if (payNow > 0) {
     const payLock = await assertPaymentsOpen(booking.hotelId);
@@ -232,12 +234,25 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       where: { id: booking.id },
       data: {
         status: "checkedin",
+        guestName: resolvedGuestName,
         amount: finalAmount,
         discountPercent: useRules ? booking.discountPercent ?? 0 : discountPercent,
         discountPerNight: useRules ? booking.discountPerNight ?? 0 : discountPerNight,
         paid: booking.paid + payNow,
         ...(channelId ? { channelId } : {}),
       },
+    }),
+    prisma.booking.updateMany({
+      where: {
+        guestId: guest.id,
+        id: { not: booking.id },
+        status: { in: ["new", "confirmed", "checkedin"] },
+      },
+      data: { guestName: resolvedGuestName },
+    }),
+    prisma.transaction.updateMany({
+      where: { bookingId: booking.id },
+      data: { guestName: resolvedGuestName },
     }),
     ...(booking.bedId
       ? []
@@ -254,7 +269,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
           paymentMethod,
           amount: payNow,
           bookingId: booking.id,
-          guestName: booking.guestName,
+          guestName: resolvedGuestName,
           roomNumber: booking.room.number,
           paymentNights,
           discountRuleId: appliedRuleId,

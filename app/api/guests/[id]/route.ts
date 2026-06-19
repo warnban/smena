@@ -3,7 +3,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
 import { assertCanManage } from "@/lib/permissions";
-import { guestUpdatePayload } from "@/lib/guest-form";
+import { guestUpdatePayload, formDisplayName } from "@/lib/guest-form";
 import { apiErrorMessage } from "@/lib/api-error";
 import { deleteStoredFile } from "@/lib/object-storage.server";
 import type { GuestFormData } from "@/lib/guest-form";
@@ -23,11 +23,12 @@ export async function PATCH(
   if (!guest) return NextResponse.json({ error: "Гость не найден" }, { status: 404 });
 
   const body = await req.json();
-  const { form, regCardSigned, vip, isForeigner: isForeignerPatch } = body as {
+  const { form, regCardSigned, vip, isForeigner: isForeignerPatch, bookingId } = body as {
     form?: GuestFormData;
     regCardSigned?: boolean;
     vip?: boolean;
     isForeigner?: boolean;
+    bookingId?: string;
   };
 
   if (!form) {
@@ -35,19 +36,39 @@ export async function PATCH(
   }
 
   const payload = guestUpdatePayload(form, isForeignerPatch ?? guest.isForeigner);
+  const resolvedGuestName = formDisplayName(form) || payload.name;
 
-  const updated = await prisma.guest.update({
-    where: { id: guest.id },
-    data: {
-      ...payload,
-      ...(isForeignerPatch !== undefined ? { isForeigner: isForeignerPatch } : {}),
-      ...(regCardSigned !== undefined ? { regCardSigned } : {}),
-      ...(vip !== undefined ? { vip } : {}),
-      visa: payload.visa ? payload.visa : Prisma.JsonNull,
-      migrationCard: payload.migrationCard ? payload.migrationCard : Prisma.JsonNull,
-    },
-    include: { documents: true },
-  });
+  const ops: Prisma.PrismaPromise<unknown>[] = [
+    prisma.guest.update({
+      where: { id: guest.id },
+      data: {
+        ...payload,
+        name: resolvedGuestName,
+        ...(isForeignerPatch !== undefined ? { isForeigner: isForeignerPatch } : {}),
+        ...(regCardSigned !== undefined ? { regCardSigned } : {}),
+        ...(vip !== undefined ? { vip } : {}),
+        visa: payload.visa ? payload.visa : Prisma.JsonNull,
+        migrationCard: payload.migrationCard ? payload.migrationCard : Prisma.JsonNull,
+      },
+      include: { documents: true },
+    }),
+  ];
+
+  if (bookingId) {
+    ops.push(
+      prisma.booking.updateMany({
+        where: {
+          guestId: guest.id,
+          id: bookingId,
+          hotel: { seatId: session.seatId },
+          status: { in: ["new", "confirmed", "checkedin"] },
+        },
+        data: { guestName: resolvedGuestName },
+      })
+    );
+  }
+
+  const [updated] = await prisma.$transaction(ops);
 
   return NextResponse.json({ ok: true, guest: updated });
 }
