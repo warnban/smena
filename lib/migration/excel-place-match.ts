@@ -4,6 +4,19 @@ import { formatDormPlaceLabel } from "@/lib/dorm";
 import { aitunnelEmbed } from "@/lib/aitunnel.server";
 import type { CrmPlaceSlot, PlaceMatch } from "@/lib/migration/excel-types";
 
+/** Разбить «16 VIP, 20 VIP» или «3/20, 3/20» на отдельные места. */
+export function expandExcelPlaceTokens(raw: string): string[] {
+  return raw
+    .split(/[,;]/)
+    .map((p) => p.trim())
+    .filter(Boolean);
+}
+
+export function isVirtualExcelPlace(raw: string): boolean {
+  const t = raw.trim().toLowerCase();
+  return t === "—" || t === "-" || t === "–" || t.includes("виртуал");
+}
+
 function normalizePlace(s: string): string {
   return s
     .toLowerCase()
@@ -13,6 +26,27 @@ function normalizePlace(s: string): string {
     .replace(/[.,]/g, " ")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+function normalizeRoomNum(s: string): string {
+  const n = s.trim().replace(/^0+/, "");
+  return n || "0";
+}
+
+function normalizeBedToken(s: string): string {
+  const t = s.trim().toLowerCase();
+  if (t.includes("диван") || t === "divan") return "диван";
+  const m = t.match(/^0*(\d+)([a-zа-я]?)$/i);
+  if (m) return `${m[1]}${(m[2] ?? "").toLowerCase()}`;
+  return t.replace(/\s+/g, "");
+}
+
+function roomNumbersEqual(a: string, b: string): boolean {
+  return normalizeRoomNum(a) === normalizeRoomNum(b);
+}
+
+function bedTokensEqual(a: string, b: string): boolean {
+  return normalizeBedToken(a) === normalizeBedToken(b);
 }
 
 function cosine(a: number[], b: number[]): number {
@@ -34,36 +68,44 @@ export function buildCrmPlaceCatalog(
 ): CrmPlaceSlot[] {
   const out: CrmPlaceSlot[] = [];
   for (const room of rooms) {
+    const roomNum = room.number.trim();
     if (room.kind === "private") {
-      const n = room.number.trim();
+      const keys = new Set<string>([
+        normalizePlace(roomNum),
+        normalizePlace(`${roomNum} ном`),
+        normalizePlace(`ном ${roomNum}`),
+        normalizePlace(`${roomNum} vip`),
+        normalizePlace(`${roomNum} vip ном`),
+      ]);
       out.push({
         roomId: room.id,
         bedId: null,
         kind: "private",
-        label: n,
-        searchKeys: [
-          normalizePlace(n),
-          normalizePlace(`${n} ном`),
-          normalizePlace(`ном ${n}`),
-          normalizePlace(`№${n}`),
-        ],
+        label: roomNum,
+        searchKeys: Array.from(keys),
       });
     } else {
       const roomBeds = beds.filter((b) => b.roomId === room.id);
       for (const bed of roomBeds) {
-        const place = formatDormPlaceLabel(room.number, bed.label);
+        const place = formatDormPlaceLabel(roomNum, bed.label);
         const parts = place.split("/");
+        const bedLabel = bed.label.trim();
+        const keys = new Set<string>([
+          normalizePlace(place),
+          normalizePlace(`${parts[0]}/${parts[1]}`),
+          normalizePlace(bedLabel),
+          normalizePlace(`${roomNum} ${bedLabel}`),
+          normalizePlace(`${normalizeRoomNum(roomNum)}/${normalizeBedToken(bedLabel)}`),
+        ]);
+        if (bedLabel.toLowerCase().includes("диван")) {
+          keys.add(normalizePlace(`${normalizeRoomNum(roomNum)}/диван`));
+        }
         out.push({
           roomId: room.id,
           bedId: bed.id,
           kind: "dorm",
           label: place,
-          searchKeys: [
-            normalizePlace(place),
-            normalizePlace(`${parts[0]}/${parts[1]}`),
-            normalizePlace(bed.label),
-            normalizePlace(`${room.number} ${bed.label}`),
-          ],
+          searchKeys: Array.from(keys),
         });
       }
     }
@@ -71,45 +113,65 @@ export function buildCrmPlaceCatalog(
   return out;
 }
 
+function matchDormSlash(
+  roomPart: string,
+  bedPart: string,
+  catalog: CrmPlaceSlot[]
+): CrmPlaceSlot | null {
+  for (const slot of catalog) {
+    if (slot.kind !== "dorm" || !slot.bedId) continue;
+    const slotNorm = normalizePlace(slot.label);
+    const slotParts = slotNorm.split("/");
+    if (slotParts.length < 2) continue;
+    if (!roomNumbersEqual(slotParts[0]!, roomPart)) continue;
+    if (bedTokensEqual(slotParts[1]!, bedPart)) return slot;
+  }
+  return null;
+}
+
 function ruleMatchPlace(excelPlace: string, catalog: CrmPlaceSlot[]): CrmPlaceSlot | null {
-  const norm = normalizePlace(excelPlace);
+  const raw = excelPlace.trim();
+  if (!raw || isVirtualExcelPlace(raw)) return null;
+
+  const norm = normalizePlace(raw);
   if (!norm) return null;
 
   for (const slot of catalog) {
     if (slot.searchKeys.includes(norm)) return slot;
   }
 
-  const slash = norm.match(/^(\d+)\s*\/\s*(\d+)$/);
-  if (slash) {
-    const [, roomPart, bedPart] = slash;
+  const vip = norm.match(/^(\d+)\s*vip$/);
+  if (vip) {
+    const num = normalizeRoomNum(vip[1]!);
     for (const slot of catalog) {
-      if (slot.kind !== "dorm" || !slot.bedId) continue;
-      const slotNorm = normalizePlace(slot.label);
-      if (slotNorm === `${roomPart}/${bedPart}`) return slot;
-      const slotParts = slotNorm.split("/");
-      if (slotParts[0] === roomPart && (slotParts[1] === bedPart || slotParts[1]?.replace(/^0+/, "") === bedPart?.replace(/^0+/, ""))) {
-        return slot;
-      }
+      if (slot.kind === "private" && normalizeRoomNum(slot.label) === num) return slot;
     }
+  }
+
+  const slash = norm.match(/^(\d+)\s*\/\s*(.+)$/);
+  if (slash) {
+    const matched = matchDormSlash(slash[1]!, slash[2]!, catalog);
+    if (matched) return matched;
   }
 
   const roomOnly = norm.match(/^(\d+)\s*ном?$/);
   if (roomOnly) {
-    const num = roomOnly[1]!;
+    const num = normalizeRoomNum(roomOnly[1]!);
     for (const slot of catalog) {
-      if (slot.kind === "private" && normalizePlace(slot.label) === num) return slot;
+      if (slot.kind === "private" && normalizeRoomNum(slot.label) === num) return slot;
     }
   }
 
   if (/^\d+$/.test(norm)) {
+    const num = normalizeRoomNum(norm);
+    for (const slot of catalog) {
+      if (slot.kind === "private" && normalizeRoomNum(slot.label) === num) return slot;
+    }
     for (const slot of catalog) {
       if (slot.kind === "dorm" && slot.bedId) {
         const parts = normalizePlace(slot.label).split("/");
-        if (parts[1] === norm || parts[1]?.replace(/^0+/, "") === norm.replace(/^0+/, "")) return slot;
+        if (parts[1] && bedTokensEqual(parts[1], num)) return slot;
       }
-    }
-    for (const slot of catalog) {
-      if (slot.kind === "private" && normalizePlace(slot.label) === norm) return slot;
     }
   }
 
@@ -122,13 +184,31 @@ export async function matchExcelPlaces(
   catalog: CrmPlaceSlot[],
   useEmbeddings: boolean
 ): Promise<PlaceMatch[]> {
-  const unique = Array.from(new Set(excelPlaces.map((p) => p.trim()).filter(Boolean)));
+  const tokenSet = new Set<string>();
+  for (const p of excelPlaces) {
+    for (const token of expandExcelPlaceTokens(p)) tokenSet.add(token);
+  }
+  const unique = Array.from(tokenSet);
   const results: PlaceMatch[] = [];
   const needEmbed: string[] = [];
 
   for (const excelPlace of unique) {
+    if (isVirtualExcelPlace(excelPlace)) {
+      results.push({
+        excelPlace,
+        hotelId,
+        roomId: null,
+        bedId: null,
+        crmLabel: null,
+        score: 0,
+        method: "rule",
+      });
+      continue;
+    }
+
     const ruled = ruleMatchPlace(excelPlace, catalog);
     if (ruled) {
+      const norm = normalizePlace(excelPlace);
       results.push({
         excelPlace,
         hotelId,
@@ -136,7 +216,7 @@ export async function matchExcelPlaces(
         bedId: ruled.bedId,
         crmLabel: ruled.label,
         score: 1,
-        method: ruled.searchKeys.includes(normalizePlace(excelPlace)) ? "exact" : "rule",
+        method: ruled.searchKeys.includes(norm) ? "exact" : "rule",
       });
     } else {
       needEmbed.push(excelPlace);
@@ -159,8 +239,13 @@ export async function matchExcelPlaces(
   }
 
   try {
-    const crmTexts = catalog.map((c) => c.label);
-    const excelTexts = needEmbed.map((p) => `койко место ${p}`);
+    const crmTexts = catalog.map((c) =>
+      c.kind === "private" ? `отдельный номер ${c.label} VIP` : `койко место ${c.label}`
+    );
+    const excelTexts = needEmbed.map((p) => {
+      if (/vip/i.test(p)) return `отдельный номер ${p}`;
+      return `койко место ${p}`;
+    });
     const vectors = await aitunnelEmbed([...crmTexts, ...excelTexts]);
     const crmVecs = vectors.slice(0, catalog.length);
     const excelVecs = vectors.slice(catalog.length);
@@ -177,7 +262,7 @@ export async function matchExcelPlaces(
           bestIdx = j;
         }
       }
-      const THRESHOLD = 0.78;
+      const THRESHOLD = 0.72;
       if (bestIdx >= 0 && bestScore >= THRESHOLD) {
         const slot = catalog[bestIdx]!;
         results.push({
@@ -216,6 +301,24 @@ export async function matchExcelPlaces(
   }
 
   return results;
+}
+
+export function resolvePlaceMatch(
+  rawPlace: string,
+  hotelId: string,
+  placeByKey: Map<string, PlaceMatch>
+): PlaceMatch | null {
+  const tokens = expandExcelPlaceTokens(rawPlace);
+  for (const token of tokens) {
+    if (isVirtualExcelPlace(token)) continue;
+    const m = placeByKey.get(`${hotelId}|${token}`);
+    if (m?.roomId) return m;
+  }
+  for (const token of tokens) {
+    const m = placeByKey.get(`${hotelId}|${token}`);
+    if (m) return m;
+  }
+  return null;
 }
 
 export function normalizeHotelName(name: string): string {

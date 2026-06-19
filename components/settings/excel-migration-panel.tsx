@@ -117,9 +117,8 @@ export function ExcelMigrationPanel({ canEdit }: { canEdit: boolean }) {
           Импорт из Excel
         </h3>
         <p className="text-[12px] text-muted-foreground mt-1 max-w-2xl">
-          Загрузите экспорт из старой CRM (<code className="text-[11px]">guest_export_….xlsx</code>).
-          Отели, номера и койки должны быть созданы заранее — ИИ сопоставит названия и места.
-          Импортируются все три хостела из файла сразу.
+          Загрузите экспорт из старой CRM. Отдельные номера в Excel могут быть как «16 VIP» — в CRM это номер 16.
+          Койки — формат «комната/койко-место» (например 2/14). ИИ помогает при расхождениях в написании.
         </p>
       </div>
 
@@ -199,6 +198,12 @@ export function ExcelMigrationPanel({ canEdit }: { canEdit: boolean }) {
           {preview.dateRange && (
             <p className="text-muted-foreground">
               Период оплат: {preview.dateRange.from} — {preview.dateRange.to}
+            </p>
+          )}
+
+          {preview.virtualPlaces.length > 0 && (
+            <p className="text-muted-foreground text-[11px]">
+              Виртуальные места ({preview.virtualPlaces.length}): при импорте назначится первый доступный номер.
             </p>
           )}
 

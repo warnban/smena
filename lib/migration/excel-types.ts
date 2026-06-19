@@ -71,6 +71,7 @@ export type ExcelPreviewResult = {
   };
   placeMatches: PlaceMatch[];
   unmatchedPlaces: string[];
+  virtualPlaces: string[];
   unmatchedHotels: string[];
   paymentMethods: string[];
   dateRange: { from: string; to: string } | null;

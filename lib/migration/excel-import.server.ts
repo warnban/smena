@@ -20,8 +20,10 @@ import {
 } from "@/lib/migration/excel-parse";
 import {
   buildCrmPlaceCatalog,
+  isVirtualExcelPlace,
   matchExcelPlaces,
   matchHotelByName,
+  resolvePlaceMatch,
 } from "@/lib/migration/excel-place-match";
 import type {
   ExcelGuestRow,
@@ -166,6 +168,9 @@ export async function previewExcelImport(
   const unmatchedPlaces = placeMatches
     .filter((m) => m.method === "unmatched")
     .map((m) => m.excelPlace);
+  const virtualPlaces = placeMatches
+    .filter((m) => isVirtualExcelPlace(m.excelPlace))
+    .map((m) => m.excelPlace);
 
   const paymentMethods = Array.from(
     new Set([
@@ -184,6 +189,7 @@ export async function previewExcelImport(
     stats: computePreviewStats(data, aliasMap),
     placeMatches,
     unmatchedPlaces: Array.from(new Set(unmatchedPlaces)),
+    virtualPlaces: Array.from(new Set(virtualPlaces)),
     unmatchedHotels,
     paymentMethods,
     dateRange:
@@ -345,7 +351,7 @@ export async function importExcelWorkbook(
       continue;
     }
 
-    const placeMatch = placeByKey.get(`${agg.hotelId}|${agg.place}`);
+    const placeMatch = resolvePlaceMatch(agg.place, agg.hotelId, placeByKey);
     let roomId = placeMatch?.roomId;
     let bedId = placeMatch?.bedId ?? null;
 
