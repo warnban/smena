@@ -3,9 +3,16 @@
 import { Sidebar } from "@/components/shell/sidebar";
 import { BottomNav } from "@/components/shell/bottom-nav";
 import { LoadErrorBanner } from "@/components/shell/load-error-banner";
-import { AssistantPanel } from "@/components/assistant/assistant-panel";
+import { HamsterCopilotShell } from "@/components/hamster/hamster-copilot-shell";
+import { useHamsterMode } from "@/components/providers/hamster-mode";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
+  const { enabled } = useHamsterMode();
+
+  if (enabled) {
+    return <HamsterCopilotShell />;
+  }
+
   return (
     <>
       <div className="flex min-h-dvh min-h-screen bg-background">
@@ -16,7 +23,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </main>
       </div>
       <BottomNav />
-      <AssistantPanel />
     </>
   );
 }

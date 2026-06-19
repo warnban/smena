@@ -3,6 +3,7 @@ import { Prisma } from "@prisma/client";
 import { getSession } from "@/lib/auth";
 import { assertSeatOps } from "@/lib/permissions";
 import { executePendingAction } from "@/lib/assistant/execute.server";
+import { buildPrintFormUrls } from "@/lib/assistant/queries.server";
 import type { PendingAction } from "@/lib/assistant/types";
 import { apiErrorMessage } from "@/lib/api-error";
 import { prisma } from "@/lib/prisma";
@@ -48,14 +49,15 @@ export async function POST(req: NextRequest) {
         where: { id: conversationId },
         data: { pendingAction: Prisma.DbNull },
       });
+      const cancelReply = "Ладно, хомячок — отменили. Хочешь что-то другое? 🐹";
       await prisma.assistantMessage.create({
         data: {
           conversationId,
           role: "assistant",
-          content: "Операция отменена.",
+          content: cancelReply,
         },
       });
-      return NextResponse.json({ ok: true, cancelled: true, reply: "Операция отменена." });
+      return NextResponse.json({ ok: true, cancelled: true, reply: cancelReply });
     }
 
     const result = await executePendingAction(auth.session, pendingAction, {
@@ -67,21 +69,31 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: result.error }, { status: 400 });
     }
 
+    let printLinks: Array<{ label: string; url: string }> | undefined;
+    if (pendingAction.type === "checkin" && result.guestId && result.bookingId) {
+      printLinks = buildPrintFormUrls(result.guestId, result.bookingId);
+    }
+
     await prisma.assistantConversation.update({
       where: { id: conversationId },
       data: { pendingAction: Prisma.DbNull },
     });
 
+    let replyText = result.message;
+    if (printLinks?.length) {
+      replyText += "\n\n🖨️ Бланки готовы — жми кнопки ниже, откроются в новой вкладке.";
+    }
+
     await prisma.assistantMessage.create({
       data: {
         conversationId,
         role: "assistant",
-        content: result.message,
-        metadata: { executed: pendingAction.type },
+        content: replyText,
+        metadata: { executed: pendingAction.type, printLinks },
       },
     });
 
-    return NextResponse.json({ ok: true, reply: result.message });
+    return NextResponse.json({ ok: true, reply: replyText, printLinks });
   } catch (e) {
     console.error("[assistant/confirm]", e);
     return NextResponse.json(

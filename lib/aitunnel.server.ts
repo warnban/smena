@@ -20,6 +20,11 @@ export function aitunnelAssistantModel(): string {
   return process.env.AITUNNEL_ASSISTANT_MODEL?.trim() || "claude-haiku-4.5";
 }
 
+/** Hamster copilot — основной диалог и tool calling */
+export function aitunnelHamsterModel(): string {
+  return process.env.AITUNNEL_HAMSTER_MODEL?.trim() || "claude-sonnet-4.6";
+}
+
 export function aitunnelEmbeddingModel(): string {
   return process.env.AITUNNEL_EMBEDDING_MODEL?.trim() || "text-embedding-3-small";
 }

@@ -23,12 +23,23 @@ import {
 import { buildAccommodationRefundNote } from "@/lib/booking-transaction-notes";
 import type { PendingAction } from "@/lib/assistant/types";
 import type { SessionPayload } from "@/lib/auth";
+import {
+  executeBookingService,
+  executeCancelBooking,
+  executeCheckIn,
+  executeCheckout,
+  executeEncashment,
+  executeHkComplete,
+  executeMigReg,
+  executeRelocate,
+  executeSale,
+} from "@/lib/assistant/execute-hamster.server";
 
 export async function executePendingAction(
   session: SessionPayload,
   action: PendingAction,
   opts: { paymentMethod?: string; channelId?: string }
-): Promise<{ ok: true; message: string } | { ok: false; error: string }> {
+): Promise<{ ok: true; message: string; guestId?: string; bookingId?: string; printLinks?: Array<{ label: string; url: string }> } | { ok: false; error: string }> {
   switch (action.type) {
     case "record_payment":
       return executeRecordPayment(session, action.payload, opts);
@@ -38,6 +49,24 @@ export async function executePendingAction(
       return executeRefund(session, action.payload, opts);
     case "create_booking":
       return executeCreateBooking(session, action.payload);
+    case "checkin":
+      return executeCheckIn(session, action.payload, opts);
+    case "checkout":
+      return executeCheckout(session, action.payload);
+    case "relocate":
+      return executeRelocate(session, action.payload);
+    case "sale":
+      return executeSale(session, action.payload, opts);
+    case "encashment":
+      return executeEncashment(session, action.payload, opts);
+    case "cancel_booking":
+      return executeCancelBooking(session, action.payload);
+    case "booking_service":
+      return executeBookingService(session, action.payload, opts);
+    case "mig_reg":
+      return executeMigReg(session, action.payload);
+    case "hk_complete":
+      return executeHkComplete(session, action.payload);
     default:
       return { ok: false, error: "Неизвестная операция" };
   }

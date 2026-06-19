@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Search, Bell, X } from "lucide-react";
 import { ThemeToggle } from "@/components/shell/theme-toggle";
+import { HamsterModeToggle } from "@/components/hamster/hamster-mode-toggle";
 import { BOOKING_ST } from "@/lib/constants";
 import { fmtDate } from "@/lib/format";
 
@@ -132,6 +133,7 @@ export function TopBar({
             {mobileSearch ? <X size={16} /> : <Search size={16} />}
           </button>
           <div className="hidden md:block">{searchField}</div>
+          <HamsterModeToggle />
           <ThemeToggle />
           <button type="button" className="relative p-2 rounded-lg text-muted-foreground hover:bg-accent transition-colors hidden sm:flex">
             <Bell size={15} />
